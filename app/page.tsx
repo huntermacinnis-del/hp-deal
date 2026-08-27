@@ -487,288 +487,254 @@ export default function GameBoard() {
 
       triggerSpellAnimation(actionCard.name.toUpperCase(), myName);
 
-      const checkOpponentProtegoInterrupt = (callback: () => void) => {
-          const protegoIndex = opponentHand.findIndex(c => c.name.toLowerCase().includes("protego"));
-          
-          if (protegoIndex !== -1 && Math.random() < 0.75) {
-            const protegoCard = opponentHand[protegoIndex];
-            setDiscardPile(prev => [protegoCard, ...prev]);
-            addLog(`🛡️ ${opponentName} revealed Protego and blocked your ${actionCard.name}!`);
-
-            const protegoInHand = myHand.find(c => c.name.toLowerCase().includes("protego"));
-            const protegoOnTable = tableActions.find(c => c.name.toLowerCase().includes("protego"));
-            const playerProtego = protegoInHand || protegoOnTable;
-
-            if (playerProtego) {
-              setPlayerDefenseWindow({
-                attackName: `${opponentName}'s Protego block against ${actionCard.name}`,
-                attackDescription: "They are attempting to block your spell!",
-                timeLeft: 15,
-                onAccept: () => {
-                  setDiscardPile(prev => [actionCard, ...prev]);
-                  addLog(`Your ${actionCard.name} was successfully blocked by ${opponentName}'s Protego.`);
-                  alert(`${opponentName} countered with Protego! Your ${actionCard.name} was blocked.`);
-                },
-                onCounterProtego: () => {
-                  if (protegoInHand) setMyHand(prev => prev.filter(c => c.runtimeId !== playerProtego.runtimeId));
-                  else setTableActions(prev => prev.filter(c => c.runtimeId !== playerProtego.runtimeId));
-                  
-                  triggerSpellAnimation("PROTEGO", myName);
-                  setDiscardPile(prev => [playerProtego, actionCard, ...prev]);
-                  addLog(`🛡️ You countered ${opponentName}'s Protego with your own! Your ${actionCard.name} succeeds.`);
-                  setPlayerDefenseWindow(null);
-                  callback();
-                }
-              });
-            } else {
-              setDiscardPile(prev => [actionCard, ...prev]);
-              alert(`${opponentName} countered with Protego! Your ${actionCard.name} was blocked.`);
-            }
-            return;
-          }
-          setDiscardPile(prev => [actionCard, ...prev]);
-          callback();
-      };
-
-      checkOpponentProtegoInterrupt(() => {
-        if (actionName.includes("accio") || actionName.includes("rent")) {
-          let targetColors: string[] = [];
-          if (actionCard.colorSet && actionCard.colorSet.includes("/")) {
-            targetColors = actionCard.colorSet.split("/");
-          } else if (actionName.includes("wild any color") || actionName.includes("wild rent") || actionCard.colorSet?.includes("Any")) {
-            const ownedColors = new Set<string>();
-            myProperties.forEach(c => ownedColors.add(getCardColor(c)));
-            targetColors = Array.from(ownedColors);
-          } else {
-            targetColors = [actionCard.colorSet];
-          }
-
-          const validColors = targetColors.filter(col => {
-            const count = myProperties.filter(c => getCardColor(c) === col).length;
-            return count > 0;
-          });
-
-          if (validColors.length === 0) {
-            alert("You don't own any items in those colors to collect points for!");
-            addLog(`Played ${actionCard.name}, but you don't own items in those colors.`);
-          } else if (validColors.length === 1) {
-            const ptsAmt = calculatePointsForColor(validColors[0]);
-            addLog(`Played ${actionCard.name}: charged ${ptsAmt} pts for ${validColors[0]}.`);
-            triggerPayment(ptsAmt, `Points for ${validColors[0]} Set`);
-          } else {
-            setRentSelectionModal({ validColors, actionCard });
-          }
-        } 
-        else if (actionName.includes("alohomora")) {
-          addLog("Cast Alohomora: requested 2 point fee.");
-          triggerPayment(2, "Alohomora Spell Fee");
+      if (actionName.includes("accio") || actionName.includes("rent")) {
+        let targetColors: string[] = [];
+        if (actionCard.colorSet && actionCard.colorSet.includes("/")) {
+          targetColors = actionCard.colorSet.split("/");
+        } else if (actionName.includes("wild any color") || actionName.includes("wild rent") || actionCard.colorSet?.includes("Any")) {
+          const ownedColors = new Set<string>();
+          myProperties.forEach(c => ownedColors.add(getCardColor(c)));
+          targetColors = Array.from(ownedColors);
+        } else {
+          targetColors = [actionCard.colorSet];
         }
-        else if (actionName.includes("confundo") || actionName.includes("confundus")) {
-          addLog("Cast Confundo: starting item swap.");
-          setConfundoModal({ step: 'my', actionCard: actionCard, chosenMyCard: null });
-        }
-        else if (actionName.includes("geminio")) {
-          let currentDeck = [...drawPile];
-          let currentDiscard = [...discardPile];
-          if (currentDeck.length < 2) {
-            const shuffled = shuffleArray(currentDiscard);
-            currentDeck = [...currentDeck, ...shuffled];
-            currentDiscard = [];
-            addLog("Draw pile depleted. Shuffled discard pile into new draw pile.");
-          }
-          const actualDraw = Math.min(2, currentDeck.length);
-          if (actualDraw > 0) {
-              const drawn = currentDeck.splice(0, actualDraw);
-              setMyHand(prev => [...prev, ...drawn]);
-          }
-          setDrawPile(currentDeck);
-          setDiscardPile(currentDiscard);
-          addLog(`Cast Geminio: drew ${actualDraw} extra cards from deck.`);
-        } 
-        else if (actionName.includes("levicorpus")) {
-          addLog("Cast Levicorpus: select opponent item to steal.");
-          const isDraco = myCharacter?.name === "Draco Malfoy" && !frozenCharacters.some(c => c?.runtimeId === myCharacter?.runtimeId);
-          const eligibleCards = opponentProperties.filter(c => {
-             const col = getCardColor(c);
-             if (col === harryProtectedColor) return false;
-             if (!isDraco && isCompleteSet(col, opponentProperties)) return false;
-             return true;
-          });
-          if (eligibleCards.length === 0) {
-              alert("Opponent has no unprotected or non-complete items to steal!");
-          } else {
-              setTargetSelectionModal({ type: 'levicorpus', actionCard, cards: eligibleCards });
-          }
-        }
-        else if (actionName.includes("obliviate")) {
-          addLog("Cast Obliviate: select opponent set to steal.");
-          const completeColors = ["Brown", "Dark Blue", "Light Green", "Pink", "Orange", "Yellow", "Red", "Light Blue", "Dark Green", "Black"]
-              .filter(col => isCompleteSet(col, opponentProperties) && col !== harryProtectedColor);
 
-          if (completeColors.length === 0) {
-              alert("Opponent has no unprotected complete sets to steal!");
-          } else {
-              const setRepresentations = completeColors.map(col => opponentProperties.find(c => getCardColor(c) === col));
-              setTargetSelectionModal({ type: 'obliviate', actionCard, cards: setRepresentations });
-          }
+        const validColors = targetColors.filter(col => {
+          const count = myProperties.filter(c => getCardColor(c) === col).length;
+          return count > 0;
+        });
+
+        if (validColors.length === 0) {
+          alert("You don't own any items in those colors to collect points for!");
+          await addLogAndSync(`Played ${actionCard.name}, but you don't own items in those colors.`, { playsRemaining: newPlays, discardPile: [actionCard, ...discardPile] }, { hand: newHand, bank: myBank, properties: myProperties, character: myCharacter, isFrozen: isMyCharacterFrozen });
+        } else if (validColors.length === 1) {
+          const ptsAmt = calculatePointsForColor(validColors[0]);
+          await triggerNetworkAttack(actionCard, `Charging ${ptsAmt} points for their ${validColors[0]} set!`, { type: 'payment', amount: ptsAmt, reason: `Points for ${validColors[0]} Set` });
+        } else {
+          setRentSelectionModal({ validColors, actionCard });
         }
-        else if (actionName.includes("petrificus totalus")) {
-          setFrozenCharacters([...frozenCharacters, opponentCharacter]);
-          addLog(`Cast Petrificus Totalus: froze ${opponentCharacter?.name || opponentName}.`);
-        } 
-        else if (actionName.includes("reparo")) {
-          addLog("Cast Reparo: choose card from discard pile.");
-          setReparoModal(actionCard);
+      } 
+      else if (actionName.includes("alohomora")) {
+        await triggerNetworkAttack(actionCard, "Demanding 2 points from you!", { type: 'payment', amount: 2, reason: "Alohomora Spell Fee" });
+      }
+      else if (actionName.includes("confundo") || actionName.includes("confundus")) {
+        setConfundoModal({ step: 'my', actionCard: actionCard, chosenMyCard: null });
+      }
+      else if (actionName.includes("geminio")) {
+        let currentDeck = [...drawPile];
+        let currentDiscard = [...discardPile];
+        if (currentDeck.length < 2) {
+          const shuffled = shuffleArray(currentDiscard);
+          currentDeck = [...currentDeck, ...shuffled];
+          currentDiscard = [];
         }
-        else if (actionName.includes("stupefy")) {
-          addLog("Cast Stupefy: requested 5 point fee.");
-          triggerPayment(5, "Stupefy Spell Fee");
-        } 
-        else if (actionName.includes("wingardium leviosa")) {
-          addLog("Cast Wingardium Leviosa: select opponent item to discard.");
-          const isDraco = myCharacter?.name === "Draco Malfoy" && !frozenCharacters.some(c => c?.runtimeId === myCharacter?.runtimeId);
-          const eligibleCards = opponentProperties.filter(c => {
-             const col = getCardColor(c);
-             if (col === harryProtectedColor) return false;
-             if (!isDraco && isCompleteSet(col, opponentProperties)) return false;
-             return true;
-          });
-          if (eligibleCards.length === 0) {
-              alert("Opponent has no unprotected or non-complete items to discard!");
-          } else {
-              setTargetSelectionModal({ type: 'wingardium', actionCard, cards: eligibleCards });
-          }
-        }
+        const actualDraw = Math.min(2, currentDeck.length);
+        const drawn = currentDeck.splice(0, actualDraw);
+        const finalHand = [...newHand, ...drawn];
+        
+        await addLogAndSync(`Cast Geminio: drew ${actualDraw} extra cards!`, { drawPile: currentDeck, discardPile: currentDiscard, playsRemaining: newPlays, lastSpellCast: { name: "GEMINIO", player: myName, id: Math.random() } }, { hand: finalHand, bank: myBank, properties: myProperties, character: myCharacter, isFrozen: isMyCharacterFrozen });
+      } 
+      else if (actionName.includes("levicorpus")) {
+        const isDraco = myCharacter?.name === "Draco Malfoy" && !isMyCharacterFrozen;
+        const eligibleCards = opponentProperties.filter(c => {
+           const col = getCardColor(c);
+           if (col === harryProtectedColor) return false;
+           if (!isDraco && isCompleteSet(col, opponentProperties)) return false;
+           return true;
+        });
+        if (eligibleCards.length === 0) alert("Opponent has no eligible items to steal!");
+        else setTargetSelectionModal({ type: 'levicorpus', actionCard, cards: eligibleCards });
+      }
+      else if (actionName.includes("obliviate")) {
+        const completeColors = ["Brown", "Dark Blue", "Light Green", "Pink", "Orange", "Yellow", "Red", "Light Blue", "Dark Green", "Black"]
+            .filter(col => isCompleteSet(col, opponentProperties) && col !== harryProtectedColor);
+        if (completeColors.length === 0) alert("Opponent has no unprotected complete sets to steal!");
         else {
-          addLog(`Played action card: ${actionCard.name}`);
+            const setRepresentations = completeColors.map(col => opponentProperties.find(c => getCardColor(c) === col));
+            setTargetSelectionModal({ type: 'obliviate', actionCard, cards: setRepresentations });
         }
-      });
+      }
+      else if (actionName.includes("petrificus totalus")) {
+        await triggerNetworkAttack(actionCard, "Trying to freeze your character!", { type: 'freeze' });
+      } 
+      else if (actionName.includes("reparo")) {
+        setReparoModal(actionCard);
+      }
+      else if (actionName.includes("stupefy")) {
+        await triggerNetworkAttack(actionCard, "Demanding 5 points from you!", { type: 'payment', amount: 5, reason: "Stupefy Spell Fee" });
+      } 
+      else if (actionName.includes("wingardium leviosa")) {
+        const isDraco = myCharacter?.name === "Draco Malfoy" && !isMyCharacterFrozen;
+        const eligibleCards = opponentProperties.filter(c => {
+           const col = getCardColor(c);
+           if (col === harryProtectedColor) return false;
+           if (!isDraco && isCompleteSet(col, opponentProperties)) return false;
+           return true;
+        });
+        if (eligibleCards.length === 0) alert("Opponent has no eligible items to discard!");
+        else setTargetSelectionModal({ type: 'wingardium', actionCard, cards: eligibleCards });
+      }
     }
   };
 
-  const handleTargetSelection = (targetCard: any) => {
+  const handleTargetSelection = async (targetCard: any) => {
     if (!targetSelectionModal) return;
     const { type, actionCard } = targetSelectionModal;
     setTargetSelectionModal(null);
 
     const targetColor = getCardColor(targetCard);
-
+    
     if (type === 'obliviate') {
-      const cardsInSet = opponentProperties.filter(c => getCardColor(c) === targetColor);
-      setOpponentProperties(prev => prev.filter(c => getCardColor(c) !== targetColor));
-      setMyProperties(prev => {
-        const existingIds = new Set(prev.map(c => c.runtimeId));
-        const newCards = cardsInSet.filter(c => !existingIds.has(c.runtimeId));
-        return [...prev, ...newCards];
-      });
-      addLog(`Stole complete ${targetColor} item set (${cardsInSet.length} cards) using Obliviate.`);
-    } else {
-      setOpponentProperties(opponentProperties.filter(c => c.runtimeId !== targetCard.runtimeId));
-      if (type === 'levicorpus') {
-        setMyProperties(prev => [...prev, targetCard]);
-        addLog(`Stole item ${targetCard.name} using Levicorpus.`);
-      } else if (type === 'wingardium') {
-        setDiscardPile([targetCard, ...discardPile]);
-        addLog(`Sent opponent item ${targetCard.name} to discard using Wingardium Leviosa.`);
-      }
+        await triggerNetworkAttack(actionCard, `Trying to steal your ${targetColor} set!`, { type: 'steal_set', targetColor: targetColor });
+    } else if (type === 'levicorpus') {
+        await triggerNetworkAttack(actionCard, `Trying to steal your ${targetCard.name}!`, { type: 'steal_card', targetCard: targetCard });
+    } else if (type === 'wingardium') {
+        await triggerNetworkAttack(actionCard, `Trying to discard your ${targetCard.name}!`, { type: 'discard_card', targetCard: targetCard });
     }
   };
 
-  const handleConfundoSelectOpponentCard = (opponentCard: any) => {
+  const handleConfundoSelectOpponentCard = async (opponentCard: any) => {
     if (!confundoModal || !confundoModal.chosenMyCard) return;
     const myCard = confundoModal.chosenMyCard;
-
-    setMyProperties(prev => [...prev.filter(c => c.runtimeId !== myCard.runtimeId), opponentCard]);
-    setOpponentProperties(prev => [...prev.filter(c => c.runtimeId !== opponentCard.runtimeId), myCard]);
-
+    const actionCard = confundoModal.actionCard;
     setConfundoModal(null);
-    addLog(`Confundo successful: swapped your item for ${opponentName}'s item.`);
-    alert("Confundo successful! Items swapped.");
-  };
 
-  const handleReparoSelection = (card: any) => {
-    if (card.type === 'property') {
-        setDiscardPile(discardPile.filter(c => c.runtimeId !== card.runtimeId));
-        setMyProperties(prev => [...prev, card]);
-        setReparoModal(null);
-        addLog(`Reparo: recovered ${card.name} from discard pile directly to table.`);
-    } else if (card.type === 'wildcard') {
-        setDiscardPile(discardPile.filter(c => c.runtimeId !== card.runtimeId));
-        setWildcardSelectionModal(card);
-        setReparoModal(null);
-        addLog(`Reparo: recovered ${card.name} from discard pile.`);
-    } else if (card.type === 'money') {
-        setDiscardPile(discardPile.filter(c => c.runtimeId !== card.runtimeId));
-        setMyBank(prev => [...prev, card]);
-        setReparoModal(null);
-        addLog(`Reparo: recovered ${card.name} to bank.`);
-    } else {
-        setDiscardPile(discardPile.filter(c => c.runtimeId !== card.runtimeId));
-        setMyHand(prev => [...prev, card]);
-        setReparoModal(null);
-        addLog(`Reparo: recovered ${card.name} from discard pile to your hand.`);
-    }
-  };
-
-  const handleColorSelectionForRent = (chosenColor: string) => {
-    if (!rentSelectionModal) return;
-    const ptsAmt = calculatePointsForColor(chosenColor);
-    setDiscardPile([rentSelectionModal.actionCard, ...discardPile]);
-    triggerPayment(ptsAmt, `Points for ${chosenColor} Set`);
-    addLog(`Charged ${ptsAmt} points for ${chosenColor} set.`);
-    setRentSelectionModal(null);
-  };
-
-  const handlePayWithCard = (cardToPay: any, source: 'bank' | 'property') => {
-    if (source === 'property') {
-        setOpponentProperties(opponentProperties.filter(c => c.runtimeId !== cardToPay.runtimeId));
-        setMyProperties(prev => [...prev, cardToPay]);
-        addLog(`You surrendered item: ${cardToPay.name}`);
-    } else {
-        setOpponentBank(opponentBank.filter(c => c.runtimeId !== cardToPay.runtimeId));
-        setMyBank(prev => [...prev, cardToPay]);
-        addLog(`${opponentName} paid a card from their bank.`);
-    }
+    triggerSpellAnimation("CONFUNDO", myName);
     
-    if (paymentPrompt) {
-      const cardValue = Number(cardToPay.value) || 1;
-      const remaining = paymentPrompt.amount - cardValue;
-      const remainingAssets = opponentBank.filter(c => c.runtimeId !== cardToPay.runtimeId).reduce((sum, c) => sum + (Number(c.value) || 0), 0) + 
-                              opponentProperties.filter(c => c.runtimeId !== cardToPay.runtimeId && getCardColor(c) !== harryProtectedColor).reduce((sum, c) => sum + (Number(c.value) || 1), 0);
+    const newMyProps = [...myProperties.filter(c => c.runtimeId !== myCard.runtimeId), opponentCard];
+    const newOppProps = [...opponentProperties.filter(c => c.runtimeId !== opponentCard.runtimeId), myCard];
+    
+    await addLogAndSync(
+        `Confundo successful!`, 
+        { discardPile: [actionCard, ...discardPile], lastSpellCast: { name: "CONFUNDO", player: myName, id: Math.random() } }, 
+        { properties: newMyProps, hand: myHand, bank: myBank, character: myCharacter, isFrozen: isMyCharacterFrozen },
+        { properties: newOppProps, hand: opponentHand, bank: opponentBank, character: opponentCharacter, isFrozen: isOpponentFrozen }
+    );
+  };
 
-      if (remaining <= 0 || remainingAssets === 0) {
-        setPaymentPrompt(null);
-        setIsPaymentVaultOpen(false);
-        addLog("Payment completed successfully.");
+  const handleReparoSelection = async (card: any) => {
+    if (!reparoModal) return;
+    const actionCard = reparoModal;
+    setReparoModal(null);
+
+    const newDiscard = discardPile.filter(c => c.runtimeId !== card.runtimeId);
+    newDiscard.unshift(actionCard); 
+    
+    let newHand = myHand;
+    let newProps = myProperties;
+    let newBank = myBank;
+    let newTableActions = tableActions;
+
+    if (card.type === 'property') newProps = [...myProperties, card];
+    else if (card.type === 'wildcard') { setWildcardSelectionModal(card); return; }
+    else if (card.type === 'money') newBank = [...myBank, card];
+    else if (card.type === 'action') newTableActions = [...tableActions, card]; 
+    else newHand = [...myHand, card];
+
+    setTableActions(newTableActions);
+
+    await addLogAndSync(
+        `${myName} cast Reparo and recovered ${card.name}!`, 
+        { discardPile: newDiscard }, 
+        { hand: newHand, properties: newProps, bank: newBank, character: myCharacter, isFrozen: isMyCharacterFrozen }
+    );
+  };
+
+  const handleColorSelectionForRent = async (chosenColor: string) => {
+    if (!rentSelectionModal) return;
+    const { actionCard } = rentSelectionModal;
+    setRentSelectionModal(null);
+    const ptsAmt = calculatePointsForColor(chosenColor);
+    await triggerNetworkAttack(actionCard, `Charging ${ptsAmt} points for their ${chosenColor} set!`, { type: 'payment', amount: ptsAmt, reason: `Points for ${chosenColor} Set` });
+  };
+
+  const handleCardClick = async (card: any) => {
+    if (!isMyTurn || turnPhase !== 'play' || playsRemaining <= 0) return;
+
+    if (isDiscardingExcess) {
+      const newHand = myHand.filter(c => c.runtimeId !== card.runtimeId);
+      const newDiscard = [card, ...discardPile];
+      
+      if (newHand.length <= 7) {
+        setIsDiscardingExcess(false);
+        const nextRole = myRole === 'player1' ? 'player2' : 'player1';
+        setTurnPhase('draw');
+        setPlaysRemaining(0);
+        await addLogAndSync(`${myName} discarded excess cards and ended turn.`, { discardPile: newDiscard, activeTurn: nextRole, turnPhase: 'draw', playsRemaining: 3 }, { hand: newHand, bank: myBank, properties: myProperties, character: myCharacter, isFrozen: isMyCharacterFrozen });
       } else {
-        setPaymentPrompt({ ...paymentPrompt, amount: remaining });
+        setMyHand(newHand);
+        setDiscardPile(newDiscard);
+        await addLogAndSync(`Discarded excess card.`, { discardPile: newDiscard }, { hand: newHand, bank: myBank, properties: myProperties, character: myCharacter, isFrozen: isMyCharacterFrozen });
       }
+      return;
+    }
+
+    const newHand = myHand.filter((c) => c.runtimeId !== card.runtimeId);
+    const newPlays = playsRemaining - 1;
+
+    if (card.type === 'property') {
+      const newProps = [...myProperties, card];
+      await addLogAndSync(`Played item: ${card.name}`, { playsRemaining: newPlays, winner: countCompleteSets(newProps) >= 3 ? myName : winner }, { hand: newHand, properties: newProps, bank: myBank, character: myCharacter, isFrozen: isMyCharacterFrozen });
+    } else if (card.type === 'wildcard') {
+      const isAny = card.colorSet?.includes("Any") || card.name.toLowerCase().includes("wild any");
+      if (isAny && myProperties.length === 0) {
+        alert("You cannot play an 'Every-Color Wild' card by itself. You must have at least one other item on the table first.");
+        return; 
+      }
+      setMyHand(newHand);
+      setWildcardSelectionModal(card);
+    } else if (card.type === 'money') {
+      const newBank = [...myBank, card];
+      await addLogAndSync(`Added points to Bank.`, { playsRemaining: newPlays }, { hand: newHand, bank: newBank, properties: myProperties, character: myCharacter, isFrozen: isMyCharacterFrozen });
+    } else if (card.type === 'action') {
+      setSelectedActionCard(card);
     }
   };
 
-  const handlePlayerPayToOpponent = (cardToPay: any, source: 'bank' | 'property') => {
+  const playTableAction = (tableCard: any) => {
+    if (!isMyTurn || turnPhase !== 'play' || playsRemaining <= 0) return;
+    setTableActions(tableActions.filter(c => c.runtimeId !== tableCard.runtimeId));
+    setSelectedActionCard(tableCard);
+  };
+
+  const calculatePointsForColor = (color: string) => {
+    const matchingProps = myProperties.filter((card) => getCardColor(card) === color);
+    if (matchingProps.length === 0) return 0;
+    const sampleCard = myProperties.find(c => c.type === 'property' && c.colorSet === color && c.rentValues);
+    if (!sampleCard || !sampleCard.rentValues) return 1; 
+    const index = Math.min(matchingProps.length - 1, sampleCard.rentValues.length - 1);
+    return sampleCard.rentValues[index];
+  };
+
+  const handlePlayerPayToOpponent = async (cardToPay: any, source: 'bank' | 'property') => {
+    let newMyBank = myBank;
+    let newMyProps = myProperties;
+    let newOppBank = opponentBank;
+    let newOppProps = opponentProperties;
+    let logMsg = "";
+
     if (source === 'property') {
-        setMyProperties(myProperties.filter(c => c.runtimeId !== cardToPay.runtimeId));
-        setOpponentProperties(prev => [...prev, cardToPay]);
-        addLog(`You surrendered item: ${cardToPay.name}`);
+        newMyProps = myProperties.filter(c => c.runtimeId !== cardToPay.runtimeId);
+        newOppProps = [...opponentProperties, cardToPay];
+        logMsg = `${myName} surrendered item: ${cardToPay.name}`;
     } else {
-        setMyBank(myBank.filter(c => c.runtimeId !== cardToPay.runtimeId));
-        setOpponentBank(prev => [...prev, cardToPay]);
-        addLog(`You paid ${cardToPay.value} points from your bank.`);
+        newMyBank = myBank.filter(c => c.runtimeId !== cardToPay.runtimeId);
+        newOppBank = [...opponentBank, cardToPay];
+        logMsg = `${myName} paid ${cardToPay.value} points from bank.`;
     }
     
     if (playerPaymentPrompt) {
       const cardValue = Number(cardToPay.value) || 1;
       const remaining = playerPaymentPrompt.amount - cardValue;
-      const remainingAssets = myBank.filter(c => c.runtimeId !== cardToPay.runtimeId).reduce((sum, c) => sum + (Number(c.value) || 0), 0) + 
-                              myProperties.filter(c => c.runtimeId !== cardToPay.runtimeId && getCardColor(c) !== harryProtectedColor).reduce((sum, c) => sum + (Number(c.value) || 1), 0);
+      const remainingAssets = newMyBank.reduce((sum, c) => sum + (Number(c.value) || 0), 0) + 
+                              newMyProps.filter(c => getCardColor(c) !== harryProtectedColor).reduce((sum, c) => sum + (Number(c.value) || 1), 0);
 
       if (remaining <= 0 || remainingAssets === 0) {
         setPlayerPaymentPrompt(null);
-        setIsMyBankOpen(false); 
-        addLog("You completed your payment.");
+        await addLogAndSync(`${logMsg} Payment complete.`, {}, { hand: myHand, bank: newMyBank, properties: newMyProps, character: myCharacter, isFrozen: isMyCharacterFrozen }, { bank: newOppBank, properties: newOppProps, hand: opponentHand, character: opponentCharacter, isFrozen: isOpponentFrozen });
       } else {
         setPlayerPaymentPrompt({ ...playerPaymentPrompt, amount: remaining });
+        await addLogAndSync(`${logMsg}`, {}, { hand: myHand, bank: newMyBank, properties: newMyProps, character: myCharacter, isFrozen: isMyCharacterFrozen }, { bank: newOppBank, properties: newOppProps, hand: opponentHand, character: opponentCharacter, isFrozen: isOpponentFrozen });
       }
     }
   };
@@ -780,15 +746,20 @@ export default function GameBoard() {
     setUnfreezeSelectedIds(prev => prev.includes(cardId) ? prev.filter(id => id !== cardId) : [...prev, cardId]);
   };
 
-  const confirmUnfreeze = () => {
+  const confirmUnfreeze = async () => {
     const discarded = unfreezeSelectedCardsArray;
-    setMyBank(prev => prev.filter(c => !unfreezeSelectedIds.includes(c.runtimeId)));
-    setMyProperties(prev => prev.filter(c => !unfreezeSelectedIds.includes(c.runtimeId)));
-    setDiscardPile(prev => [...discarded, ...prev]);
-    setFrozenCharacters(prev => prev.filter(c => c.runtimeId !== myCharacter?.runtimeId));
+    const newMyBank = myBank.filter(c => !unfreezeSelectedIds.includes(c.runtimeId));
+    const newMyProps = myProperties.filter(c => !unfreezeSelectedIds.includes(c.runtimeId));
+    const newDiscard = [...discarded, ...discardPile];
+    
     setIsUnfreezeModalOpen(false);
     setUnfreezeSelectedIds([]);
-    addLog(`You discarded ${unfreezeTotalPoints} points to lift Petrificus Totalus!`);
+    
+    await addLogAndSync(
+        `${myName} discarded ${unfreezeTotalPoints} points to lift Petrificus Totalus!`, 
+        { discardPile: newDiscard }, 
+        { hand: myHand, bank: newMyBank, properties: newMyProps, character: myCharacter, isFrozen: false }
+    );
   };
 
   const cancelUnfreeze = () => { setIsUnfreezeModalOpen(false); setUnfreezeSelectedIds([]); };
@@ -1797,55 +1768,55 @@ function PlayingCard({
               </div>
           )}
         </div>
-      );
-    }
-
-    const topClass = getPropertyColorClass(topColorName);
-    const setCounts: { [key: string]: number } = {
-      "Brown": 2, "Dark Blue": 2, "Light Green": 2, "Pink": 3, 
-      "Orange": 3, "Yellow": 3, "Red": 3, "Light Blue": 3, 
-      "Dark Green": 3, "Black": 4
-    };
-    const maxItems = setCounts[topColorName] || 3;
-    const resolvedRentValues = rentValues || (maxItems === 2 ? [1, 2] : maxItems === 4 ? [1, 2, 3, 4] : [1, 3, 5]);
-
-    return (
-      <div className="w-28 h-40 rounded-xl shadow-xl border border-stone-400 flex flex-col overflow-hidden bg-stone-50 text-stone-900 transform transition hover:-translate-y-2 cursor-pointer">
-        <div className="relative">
-          {value !== undefined && value > 0 && <span className="absolute left-1 top-1.5 w-5 h-5 bg-stone-900 text-amber-400 font-bold text-[10px] rounded-full flex items-center justify-center shadow z-10 border border-amber-500/50">{value}</span>}
-          <div className={`h-8 ${topClass} w-full flex items-center ${value ? 'justify-end pr-2' : 'justify-center'} px-1 border-b border-stone-400 shadow-sm relative`}>
-            <span className={`${name.length > 12 ? 'text-[6px] leading-[1.1]' : 'text-[7.5px] leading-tight'} font-bold uppercase tracking-tight break-words line-clamp-2 text-center ${value ? 'w-[75%]' : 'w-full'}`}>{name}</span>
-          </div>
-        </div>
-
-        <div className="flex-1 flex flex-col px-1.5 pt-1 pb-1 justify-between text-[8px] overflow-hidden">
-          <div className="grid grid-cols-2 text-center font-bold text-stone-500 border-b border-stone-200 pb-0.5 shrink-0">
-            <span>ITEMS OWNED</span>
-            <span>POINTS</span>
-          </div>
-          <div className="flex-1 flex flex-col justify-around px-1 min-h-0">
-            {resolvedRentValues.map((rent: number, idx: number) => {
-              const count = idx + 1;
-              return (
-                <div key={idx} className="flex justify-between items-center text-stone-800 font-semibold border-b border-stone-100 last:border-0 py-[1.5px]">
-                  <div className="relative w-5 h-5 flex items-center justify-center shrink-0">
-                    {count === 1 && <div className={`w-4 h-3 rounded-[2px] border border-stone-800 shadow-sm ${topClass} flex items-center justify-center text-[6px] font-bold text-white`}>1</div>}
-                    {count === 2 && <div className="relative w-5 h-4"><div className={`absolute left-0 top-0 w-4 h-3 rounded-[2px] border border-stone-800 shadow-sm ${topClass} transform -rotate-6`}></div><div className={`absolute left-1 top-0.5 w-4 h-3 rounded-[2px] border border-stone-800 shadow-sm ${topClass} flex items-center justify-center text-[6px] font-bold text-white z-10`}>2</div></div>}
-                    {count === 3 && <div className="relative w-5 h-4"><div className={`absolute left-0 top-1 w-3.5 h-2.5 rounded-[2px] border border-stone-800 ${topClass} transform -rotate-12`}></div><div className={`absolute left-1 top-0.5 w-3.5 h-2.5 rounded-[2px] border border-stone-800 ${topClass} transform -rotate-6`}></div><div className={`absolute left-2 top-0 w-3.5 h-2.5 rounded-[2px] border border-stone-800 ${topClass} flex items-center justify-center text-[5.5px] font-bold text-white z-10`}>3</div></div>}
-                    {count === 4 && <div className="relative w-5 h-4"><div className={`absolute left-0 top-1.5 w-3 h-2.5 rounded-[2px] border border-stone-800 ${topClass} transform -rotate-12`}></div><div className={`absolute left-0.5 top-1 w-3 h-2.5 rounded-[2px] border border-stone-800 ${topClass} transform -rotate-6`}></div><div className={`absolute left-1 top-0.5 w-3 h-2.5 rounded-[2px] border border-stone-800 ${topClass} transform -rotate-3`}></div><div className={`absolute left-1.5 top-0 w-3 h-2.5 rounded-[2px] border border-stone-800 ${topClass} flex items-center justify-center text-[5px] font-bold text-white z-10`}>4</div></div>}
-                  </div>
-                  <span className="font-bold text-xs text-stone-900">{rent}</span>
-                </div>
-              );
-            })}
-          </div>
-          <div className="text-center text-[6px] font-bold uppercase tracking-wider text-stone-500 shrink-0 pt-0.5">
-            Complete Set ({maxItems} Items)
-          </div>
-        </div>
       </div>
     );
   }
+
+  const topClass = getPropertyColorClass(topColorName);
+  const setCounts: { [key: string]: number } = {
+    "Brown": 2, "Dark Blue": 2, "Light Green": 2, "Pink": 3, 
+    "Orange": 3, "Yellow": 3, "Red": 3, "Light Blue": 3, 
+    "Dark Green": 3, "Black": 4
+  };
+  const maxItems = setCounts[topColorName] || 3;
+  const resolvedRentValues = rentValues || (maxItems === 2 ? [1, 2] : maxItems === 4 ? [1, 2, 3, 4] : [1, 3, 5]);
+
+  return (
+    <div className="w-28 h-40 rounded-xl shadow-xl border border-stone-400 flex flex-col overflow-hidden bg-stone-50 text-stone-900 transform transition hover:-translate-y-2 cursor-pointer">
+      <div className="relative">
+        {value !== undefined && value > 0 && <span className="absolute left-1 top-1.5 w-5 h-5 bg-stone-900 text-amber-400 font-bold text-[10px] rounded-full flex items-center justify-center shadow z-10 border border-amber-500/50">{value}</span>}
+        <div className={`h-8 ${topClass} w-full flex items-center ${value ? 'justify-end pr-2' : 'justify-center'} px-1 border-b border-stone-400 shadow-sm relative`}>
+          <span className={`${name.length > 12 ? 'text-[6px] leading-[1.1]' : 'text-[7.5px] leading-tight'} font-bold uppercase tracking-tight break-words line-clamp-2 text-center ${value ? 'w-[75%]' : 'w-full'}`}>{name}</span>
+        </div>
+      </div>
+
+      <div className="flex-1 flex flex-col px-1.5 pt-1 pb-1 justify-between text-[8px] overflow-hidden">
+        <div className="grid grid-cols-2 text-center font-bold text-stone-500 border-b border-stone-200 pb-0.5 shrink-0">
+          <span>ITEMS OWNED</span>
+          <span>POINTS</span>
+        </div>
+        <div className="flex-1 flex flex-col justify-around px-1 min-h-0">
+          {resolvedRentValues.map((rent: number, idx: number) => {
+            const count = idx + 1;
+            return (
+              <div key={idx} className="flex justify-between items-center text-stone-800 font-semibold border-b border-stone-100 last:border-0 py-[1.5px]">
+                <div className="relative w-5 h-5 flex items-center justify-center shrink-0">
+                  {count === 1 && <div className={`w-4 h-3 rounded-[2px] border border-stone-800 shadow-sm ${topClass} flex items-center justify-center text-[6px] font-bold text-white`}>1</div>}
+                  {count === 2 && <div className="relative w-5 h-4"><div className={`absolute left-0 top-0 w-4 h-3 rounded-[2px] border border-stone-800 shadow-sm ${topClass} transform -rotate-6`}></div><div className={`absolute left-1 top-0.5 w-4 h-3 rounded-[2px] border border-stone-800 shadow-sm ${topClass} flex items-center justify-center text-[6px] font-bold text-white z-10`}>2</div></div>}
+                  {count === 3 && <div className="relative w-5 h-4"><div className={`absolute left-0 top-1 w-3.5 h-2.5 rounded-[2px] border border-stone-800 ${topClass} transform -rotate-12`}></div><div className={`absolute left-1 top-0.5 w-3.5 h-2.5 rounded-[2px] border border-stone-800 ${topClass} transform -rotate-6`}></div><div className={`absolute left-2 top-0 w-3.5 h-2.5 rounded-[2px] border border-stone-800 ${topClass} flex items-center justify-center text-[5.5px] font-bold text-white z-10`}>3</div></div>}
+                  {count === 4 && <div className="relative w-5 h-4"><div className={`absolute left-0 top-1.5 w-3 h-2.5 rounded-[2px] border border-stone-800 ${topClass} transform -rotate-12`}></div><div className={`absolute left-0.5 top-1 w-3 h-2.5 rounded-[2px] border border-stone-800 ${topClass} transform -rotate-6`}></div><div className={`absolute left-1 top-0.5 w-3 h-2.5 rounded-[2px] border border-stone-800 ${topClass} transform -rotate-3`}></div><div className={`absolute left-1.5 top-0 w-3 h-2.5 rounded-[2px] border border-stone-800 ${topClass} flex items-center justify-center text-[5px] font-bold text-white z-10`}>4</div></div>}
+                </div>
+                <span className="font-bold text-xs text-stone-900">{rent}</span>
+              </div>
+            );
+          })}
+        </div>
+        <div className="text-center text-[6px] font-bold uppercase tracking-wider text-stone-500 shrink-0 pt-0.5">
+          Complete Set ({maxItems} Items)
+        </div>
+      </div>
+    </div>
+  );
 
   if (type === "action") {
     let actionBg = "bg-purple-600 text-white";
