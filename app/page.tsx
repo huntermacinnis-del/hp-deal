@@ -78,13 +78,70 @@ export default function GameBoard() {
   const [unfreezeSelectedIds, setUnfreezeSelectedIds] = useState<string[]>([]);
   const [isDiscardModalOpen, setIsDiscardModalOpen] = useState<boolean>(false);
   const [targetSelectionModal, setTargetSelectionModal] = useState<{ type: 'levicorpus' | 'wingardium' | 'obliviate'; actionCard: any, cards: any[] } | null>(null);
-  const [confundoModal, setConfundoModal] = useState<{ step: 'my'; actionCard: any, chosenMyCard: any | null } | null>(null);
+  const [confundoModal, setConfundoModal] = useState<{ step: 'my'; actionCard: any; chosenMyCard: any | null } | null>(null);
   const [wildcardSelectionModal, setWildcardSelectionModal] = useState<any | null>(null);
   const [tableWildcardEditModal, setTableWildcardEditModal] = useState<any | null>(null);
   const [reparoModal, setReparoModal] = useState<any | null>(null);
   const [cedricChoiceModal, setCedricChoiceModal] = useState<boolean>(false);
   const [isDiscardingExcess, setIsDiscardingExcess] = useState<boolean>(false);
   const [spellAnimation, setSpellAnimation] = useState<{name: string, player: string} | null>(null);
+
+  // Derived state helpers for seamless typing
+  const isMyTurn = activeTurn === myRole;
+  const myName = myRole === 'player1' ? "Hunter" : "Jess";
+  const opponentName = myRole === 'player1' ? "Jess" : "Hunter";
+
+  const myHand = myRole === 'player1' ? p1Hand : p2Hand;
+  const myBank = myRole === 'player1' ? p1Bank : p2Bank;
+  const myProperties = myRole === 'player1' ? p1Properties : p2Properties;
+  const myCharacter = myRole === 'player1' ? p1Character : p2Character;
+  const isMyCharacterFrozen = myRole === 'player1' ? p1Frozen : p2Frozen;
+
+  const opponentHand = myRole === 'player1' ? p2Hand : p1Hand;
+  const opponentBank = myRole === 'player1' ? p2Bank : p1Bank;
+  const opponentProperties = myRole === 'player1' ? p2Properties : p1Properties;
+  const opponentCharacter = myRole === 'player1' ? p2Character : p1Character;
+  const isOpponentFrozen = myRole === 'player1' ? p2Frozen : p1Frozen;
+  const frozenCharacters = [isMyCharacterFrozen ? myCharacter : null, isOpponentFrozen ? opponentCharacter : null].filter(Boolean);
+
+  // Bulletproof Wrapper Setters for TypeScript
+  const setMyHand = (updater: any) => {
+    const val = typeof updater === 'function' ? updater(myHand) : updater;
+    if (myRole === 'player1') setP1Hand(val);
+    else setP2Hand(val);
+  };
+  const setMyBank = (updater: any) => {
+    const val = typeof updater === 'function' ? updater(myBank) : updater;
+    if (myRole === 'player1') setP1Bank(val);
+    else setP2Bank(val);
+  };
+  const setMyProperties = (updater: any) => {
+    const val = typeof updater === 'function' ? updater(myProperties) : updater;
+    if (myRole === 'player1') setP1Properties(val);
+    else setP2Properties(val);
+  };
+  const setOpponentProperties = (updater: any) => {
+    const val = typeof updater === 'function' ? updater(opponentProperties) : updater;
+    if (myRole === 'player1') setP2Properties(val);
+    else setP1Properties(val);
+  };
+  const setOpponentBank = (updater: any) => {
+    const val = typeof updater === 'function' ? updater(opponentBank) : updater;
+    if (myRole === 'player1') setP2Bank(val);
+    else setP1Bank(val);
+  };
+  const setFrozenCharacters = (updater: any) => {
+    const val = typeof updater === 'function' ? updater(isMyCharacterFrozen) : updater;
+    if (myRole === 'player1') setP1Frozen(!!val);
+    else setP2Frozen(!!val);
+  };
+  const toggleWildcardColor = (card: any) => {
+    const current = getCardColor(card);
+    const colors = card.colorSet ? card.colorSet.split("/") : [];
+    if (colors.length < 2) return;
+    const nextColor = colors[0] === current ? colors[1] : colors[0];
+    setWildCardColors(prev => ({ ...prev, [card.runtimeId]: nextColor }));
+  };
 
   // Load Initial Deck
   useEffect(() => {
@@ -162,21 +219,6 @@ export default function GameBoard() {
   const syncGameState = async (updates: any) => {
     await supabase.from('game_rooms').update(updates).eq('id', ROOM_ID);
   };
-
-  const isMyTurn = activeTurn === myRole;
-  const myName = myRole === 'player1' ? "Hunter" : "Jess";
-  const opponentName = myRole === 'player1' ? "Jess" : "Hunter";
-
-  const myHand = myRole === 'player1' ? p1Hand : p2Hand;
-  const myBank = myRole === 'player1' ? p1Bank : p2Bank;
-  const myProperties = myRole === 'player1' ? p1Properties : p2Properties;
-  const myCharacter = myRole === 'player1' ? p1Character : p2Character;
-  const isMyCharacterFrozen = myRole === 'player1' ? p1Frozen : p2Frozen;
-
-  const opponentHand = myRole === 'player1' ? p2Hand : p1Hand;
-  const opponentBank = myRole === 'player1' ? p2Bank : p1Bank;
-  const opponentProperties = myRole === 'player1' ? p2Properties : p1Properties;
-  const isOpponentFrozen = myRole === 'player1' ? p2Frozen : p1Frozen;
 
   const myAvatar = myRole === 'player1' ? '/hunter.jpg' : '/jess.jpg';
   const myFallbackAvatar = myRole === 'player1' ? 'https://api.dicebear.com/7.x/avataaars/svg?seed=Hunter' : 'https://api.dicebear.com/7.x/avataaars/svg?seed=Jess';
