@@ -91,13 +91,13 @@ export default function GameBoard() {
     async function loadDeck() {
       const { data } = await supabase.from('deck').select('*');
       if (data) {
-        const normalizedData = data.map((card, idx) => ({
+        const normalizedData = data.map((card: any, idx: number) => ({
           ...card,
           runtimeId: `${card.id}-${idx}-${Math.random().toString(36).substring(2, 9)}`,
           effect: getAccurateCardEffect(card.name, card.effect)
         }));
-        setAllCharacters(normalizedData.filter((card) => card.type === 'character'));
-        setAllPlayableCards(normalizedData.filter((card) => card.type !== 'character'));
+        setAllCharacters(normalizedData.filter((card: any) => card.type === 'character'));
+        setAllPlayableCards(normalizedData.filter((card: any) => card.type !== 'character'));
       }
     }
     loadDeck();
@@ -113,7 +113,7 @@ export default function GameBoard() {
 
     const channel = supabase
       .channel('realtime_game_room')
-      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'game_rooms' }, payload => {
+      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'game_rooms' }, (payload: any) => {
         applyRemoteState(payload.new);
       })
       .subscribe();
@@ -246,14 +246,14 @@ export default function GameBoard() {
 
   const isCompleteSet = (color: string, properties: any[]) => {
     const required = getSetMax(color);
-    const cardsInSet = properties.filter(c => getCardColor(c) === color);
+    const cardsInSet = properties.filter((c: any) => getCardColor(c) === color);
     if (cardsInSet.length < required) return false;
-    const allAny = cardsInSet.every(c => c.type === 'wildcard' && (c.colorSet?.includes("Any") || c.name.toLowerCase().includes("wild any")));
+    const allAny = cardsInSet.every((c: any) => c.type === 'wildcard' && (c.colorSet?.includes("Any") || c.name.toLowerCase().includes("wild any")));
     return !allAny;
   };
 
   const isSetFull = (color: string, properties: any[]) => {
-    const count = properties.filter(c => getCardColor(c) === color).length;
+    const count = properties.filter((c: any) => getCardColor(c) === color).length;
     return count >= getSetMax(color);
   };
 
@@ -385,8 +385,8 @@ export default function GameBoard() {
      if (pendingAttack && pendingAttack.target === myRole) {
          const { actionCard, description, type, amount, reason } = pendingAttack;
          
-         const hasProtegoInHand = myHand.some(c => c.name.toLowerCase().includes("protego"));
-         const hasProtegoOnTable = tableActions.some(c => c.name.toLowerCase().includes("protego"));
+         const hasProtegoInHand = myHand.some((c: any) => c.name.toLowerCase().includes("protego"));
+         const hasProtegoOnTable = tableActions.some((c: any) => c.name.toLowerCase().includes("protego"));
          const hasProtego = hasProtegoInHand || hasProtegoOnTable;
 
          setPlayerDefenseWindow({
@@ -400,19 +400,19 @@ export default function GameBoard() {
                      await syncGameState({ board_state: { drawPile, discardPile, activeTurn, turnPhase, playsRemaining, winner, winRecorded, harryProtectedColor, wildCardColors, hunterWins, jessWins, isGameStarted, pendingAttack: null, gameLog } });
                  } else if (type === 'steal_card' || type === 'discard_card') {
                      const targetCard = pendingAttack.targetCard;
-                     const newMyProps = myProperties.filter(c => c.runtimeId !== targetCard.runtimeId);
-                     let extraBoard = { pendingAttack: null };
-                     let extraOpp = {};
+                     const newMyProps = myProperties.filter((c: any) => c.runtimeId !== targetCard.runtimeId);
+                     let extraBoard: any = { pendingAttack: null };
+                     let extraOpp: any = {};
                      if (type === 'steal_card') {
                          extraOpp = { properties: [...opponentProperties, targetCard], hand: opponentHand, bank: opponentBank, character: opponentCharacter, isFrozen: isOpponentFrozen };
                      } else {
-                         extraBoard = { ...extraBoard, discardPile: [targetCard, ...discardPile] } as any;
+                         extraBoard = { ...extraBoard, discardPile: [targetCard, ...discardPile] };
                      }
                      await addLogAndSync(`The attack succeeded on ${targetCard.name}.`, extraBoard, { properties: newMyProps, hand: myHand, bank: myBank, character: myCharacter, isFrozen: isMyCharacterFrozen }, extraOpp);
                  } else if (type === 'steal_set') {
                      const tCol = pendingAttack.targetColor;
-                     const cardsToSteal = myProperties.filter(c => getCardColor(c) === tCol);
-                     const newMyProps = myProperties.filter(c => getCardColor(c) !== tCol);
+                     const cardsToSteal = myProperties.filter((c: any) => getCardColor(c) === tCol);
+                     const newMyProps = myProperties.filter((c: any) => getCardColor(c) !== tCol);
                      await addLogAndSync(`The attack succeeded! ${opponentName} stole your ${tCol} set.`, { pendingAttack: null }, { properties: newMyProps, hand: myHand, bank: myBank, character: myCharacter, isFrozen: isMyCharacterFrozen }, { properties: [...opponentProperties, ...cardsToSteal], hand: opponentHand, bank: opponentBank, character: opponentCharacter, isFrozen: isOpponentFrozen });
                  } else if (type === 'freeze') {
                      await addLogAndSync(`The curse hit! ${myName} is frozen.`, { pendingAttack: null }, { isFrozen: true, properties: myProperties, hand: myHand, bank: myBank, character: myCharacter }, {});
@@ -423,8 +423,8 @@ export default function GameBoard() {
                      alert("You do not have a Protego card!");
                      return;
                  }
-                 const protegoCard = myHand.find(c => c.name.toLowerCase().includes("protego")) || tableActions.find(c => c.name.toLowerCase().includes("protego"));
-                 const newHand = myHand.filter(c => c.runtimeId !== protegoCard.runtimeId);
+                 const protegoCard = myHand.find((c: any) => c.name.toLowerCase().includes("protego")) || tableActions.find((c: any) => c.name.toLowerCase().includes("protego"));
+                 const newHand = myHand.filter((c: any) => c.runtimeId !== protegoCard.runtimeId);
                  
                  setPlayerDefenseWindow(null);
                  triggerSpellAnimation("PROTEGO", myName);
@@ -461,12 +461,12 @@ export default function GameBoard() {
   const resolveActionChoice = async (choice: 'bank' | 'action') => {
     if (!selectedActionCard) return;
 
-    const cardInHand = myHand.find(c => c.runtimeId === selectedActionCard.runtimeId);
+    const cardInHand = myHand.find((c: any) => c.runtimeId === selectedActionCard.runtimeId);
     let newHand = [...myHand];
     let newTableActions = [...tableActions];
 
-    if (cardInHand) newHand = newHand.filter((c) => c.runtimeId !== selectedActionCard.runtimeId);
-    else newTableActions = newTableActions.filter((c) => c.runtimeId !== selectedActionCard.runtimeId);
+    if (cardInHand) newHand = newHand.filter((c: any) => c.runtimeId !== selectedActionCard.runtimeId);
+    else newTableActions = newTableActions.filter((c: any) => c.runtimeId !== selectedActionCard.runtimeId);
     
     const newPlays = playsRemaining - 1;
     setMyHand(newHand);
@@ -491,14 +491,14 @@ export default function GameBoard() {
           targetColors = actionCard.colorSet.split("/");
         } else if (actionName.includes("wild any color") || actionName.includes("wild rent") || actionCard.colorSet?.includes("Any")) {
           const ownedColors = new Set<string>();
-          myProperties.forEach(c => ownedColors.add(getCardColor(c)));
+          myProperties.forEach((c: any) => ownedColors.add(getCardColor(c)));
           targetColors = Array.from(ownedColors);
         } else {
           targetColors = [actionCard.colorSet];
         }
 
         const validColors = targetColors.filter(col => {
-          const count = myProperties.filter(c => getCardColor(c) === col).length;
+          const count = myProperties.filter((c: any) => getCardColor(c) === col).length;
           return count > 0;
         });
 
@@ -534,7 +534,7 @@ export default function GameBoard() {
       } 
       else if (actionName.includes("levicorpus")) {
         const isDraco = myCharacter?.name === "Draco Malfoy" && !isMyCharacterFrozen;
-        const eligibleCards = opponentProperties.filter(c => {
+        const eligibleCards = opponentProperties.filter((c: any) => {
            const col = getCardColor(c);
            if (col === harryProtectedColor) return false;
            if (!isDraco && isCompleteSet(col, opponentProperties)) return false;
@@ -548,7 +548,7 @@ export default function GameBoard() {
             .filter(col => isCompleteSet(col, opponentProperties) && col !== harryProtectedColor);
         if (completeColors.length === 0) alert("Opponent has no unprotected complete sets to steal!");
         else {
-            const setRepresentations = completeColors.map(col => opponentProperties.find(c => getCardColor(c) === col));
+            const setRepresentations = completeColors.map(col => opponentProperties.find((c: any) => getCardColor(c) === col));
             setTargetSelectionModal({ type: 'obliviate', actionCard, cards: setRepresentations });
         }
       }
@@ -563,7 +563,7 @@ export default function GameBoard() {
       } 
       else if (actionName.includes("wingardium leviosa")) {
         const isDraco = myCharacter?.name === "Draco Malfoy" && !isMyCharacterFrozen;
-        const eligibleCards = opponentProperties.filter(c => {
+        const eligibleCards = opponentProperties.filter((c: any) => {
            const col = getCardColor(c);
            if (col === harryProtectedColor) return false;
            if (!isDraco && isCompleteSet(col, opponentProperties)) return false;
@@ -599,8 +599,8 @@ export default function GameBoard() {
 
     triggerSpellAnimation("CONFUNDO", myName);
     
-    const newMyProps = [...myProperties.filter(c => c.runtimeId !== myCard.runtimeId), opponentCard];
-    const newOppProps = [...opponentProperties.filter(c => c.runtimeId !== opponentCard.runtimeId), myCard];
+    const newMyProps = [...myProperties.filter((c: any) => c.runtimeId !== myCard.runtimeId), opponentCard];
+    const newOppProps = [...opponentProperties.filter((c: any) => c.runtimeId !== opponentCard.runtimeId), myCard];
     
     await addLogAndSync(
         `Confundo successful!`, 
@@ -615,7 +615,7 @@ export default function GameBoard() {
     const actionCard = reparoModal;
     setReparoModal(null);
 
-    const newDiscard = discardPile.filter(c => c.runtimeId !== card.runtimeId);
+    const newDiscard = discardPile.filter((c: any) => c.runtimeId !== card.runtimeId);
     newDiscard.unshift(actionCard); 
     
     let newHand = myHand;
@@ -650,7 +650,7 @@ export default function GameBoard() {
     if (!isMyTurn || turnPhase !== 'play' || playsRemaining <= 0) return;
 
     if (isDiscardingExcess) {
-      const newHand = myHand.filter(c => c.runtimeId !== card.runtimeId);
+      const newHand = myHand.filter((c: any) => c.runtimeId !== card.runtimeId);
       const newDiscard = [card, ...discardPile];
       
       if (newHand.length <= 7) {
@@ -667,7 +667,7 @@ export default function GameBoard() {
       return;
     }
 
-    const newHand = myHand.filter((c) => c.runtimeId !== card.runtimeId);
+    const newHand = myHand.filter((c: any) => c.runtimeId !== card.runtimeId);
     const newPlays = playsRemaining - 1;
 
     if (card.type === 'property') {
@@ -691,14 +691,14 @@ export default function GameBoard() {
 
   const playTableAction = (tableCard: any) => {
     if (!isMyTurn || turnPhase !== 'play' || playsRemaining <= 0) return;
-    setTableActions(tableActions.filter(c => c.runtimeId !== tableCard.runtimeId));
+    setTableActions(tableActions.filter((c: any) => c.runtimeId !== tableCard.runtimeId));
     setSelectedActionCard(tableCard);
   };
 
   const calculatePointsForColor = (color: string) => {
-    const matchingProps = myProperties.filter((card) => getCardColor(card) === color);
+    const matchingProps = myProperties.filter((card: any) => getCardColor(card) === color);
     if (matchingProps.length === 0) return 0;
-    const sampleCard = myProperties.find(c => c.type === 'property' && c.colorSet === color && c.rentValues);
+    const sampleCard = myProperties.find((c: any) => c.type === 'property' && c.colorSet === color && c.rentValues);
     if (!sampleCard || !sampleCard.rentValues) return 1; 
     const index = Math.min(matchingProps.length - 1, sampleCard.rentValues.length - 1);
     return sampleCard.rentValues[index];
@@ -712,11 +712,11 @@ export default function GameBoard() {
     let logMsg = "";
 
     if (source === 'property') {
-        newMyProps = myProperties.filter(c => c.runtimeId !== cardToPay.runtimeId);
+        newMyProps = myProperties.filter((c: any) => c.runtimeId !== cardToPay.runtimeId);
         newOppProps = [...opponentProperties, cardToPay];
         logMsg = `${myName} surrendered item: ${cardToPay.name}`;
     } else {
-        newMyBank = myBank.filter(c => c.runtimeId !== cardToPay.runtimeId);
+        newMyBank = myBank.filter((c: any) => c.runtimeId !== cardToPay.runtimeId);
         newOppBank = [...opponentBank, cardToPay];
         logMsg = `${myName} paid ${cardToPay.value} points from bank.`;
     }
@@ -724,8 +724,8 @@ export default function GameBoard() {
     if (playerPaymentPrompt) {
       const cardValue = Number(cardToPay.value) || 1;
       const remaining = playerPaymentPrompt.amount - cardValue;
-      const remainingAssets = newMyBank.reduce((sum, c) => sum + (Number(c.value) || 0), 0) + 
-                              newMyProps.filter(c => getCardColor(c) !== harryProtectedColor).reduce((sum, c) => sum + (Number(c.value) || 1), 0);
+      const remainingAssets = newMyBank.reduce((sum: number, c: any) => sum + (Number(c.value) || 0), 0) + 
+                              newMyProps.filter((c: any) => getCardColor(c) !== harryProtectedColor).reduce((sum: number, c: any) => sum + (Number(c.value) || 1), 0);
 
       if (remaining <= 0 || remainingAssets === 0) {
         setPlayerPaymentPrompt(null);
@@ -737,8 +737,8 @@ export default function GameBoard() {
     }
   };
 
-  const unfreezeSelectedCardsArray = [...myBank, ...myProperties].filter(c => unfreezeSelectedIds.includes(c.runtimeId));
-  const unfreezeTotalPoints = unfreezeSelectedCardsArray.reduce((sum, c) => sum + (Number(c.value) || 1), 0);
+  const unfreezeSelectedCardsArray = [...myBank, ...myProperties].filter((c: any) => unfreezeSelectedIds.includes(c.runtimeId));
+  const unfreezeTotalPoints = unfreezeSelectedCardsArray.reduce((sum: number, c: any) => sum + (Number(c.value) || 1), 0);
 
   const toggleUnfreezeSelection = (cardId: string) => {
     setUnfreezeSelectedIds(prev => prev.includes(cardId) ? prev.filter(id => id !== cardId) : [...prev, cardId]);
@@ -746,8 +746,8 @@ export default function GameBoard() {
 
   const confirmUnfreeze = async () => {
     const discarded = unfreezeSelectedCardsArray;
-    const newMyBank = myBank.filter(c => !unfreezeSelectedIds.includes(c.runtimeId));
-    const newMyProps = myProperties.filter(c => !unfreezeSelectedIds.includes(c.runtimeId));
+    const newMyBank = myBank.filter((c: any) => !unfreezeSelectedIds.includes(c.runtimeId));
+    const newMyProps = myProperties.filter((c: any) => !unfreezeSelectedIds.includes(c.runtimeId));
     const newDiscard = [...discarded, ...discardPile];
     
     setIsUnfreezeModalOpen(false);
@@ -761,8 +761,8 @@ export default function GameBoard() {
   };
 
   const cancelUnfreeze = () => { setIsUnfreezeModalOpen(false); setUnfreezeSelectedIds([]); };
-  const myBankTotal = myBank.reduce((sum, card) => sum + (Number(card.value) || 0), 0);
-  const oppBankTotal = opponentBank.reduce((sum, c) => sum + (Number(c.value) || 0), 0);
+  const myBankTotal = myBank.reduce((sum: number, card: any) => sum + (Number(card.value) || 0), 0);
+  const oppBankTotal = opponentBank.reduce((sum: number, c: any) => sum + (Number(c.value) || 0), 0);
 
   const groupedMyProperties = myProperties.reduce((acc: any, card: any) => {
     const col = getCardColor(card);
@@ -788,7 +788,7 @@ export default function GameBoard() {
           <div className="mb-6 flex justify-center gap-6 items-center bg-stone-950 p-4 rounded-xl border border-stone-800 shadow-inner">
              <div className="flex flex-col items-center">
                  <div className="w-12 h-12 rounded-full overflow-hidden border-2 border-amber-500 bg-stone-800 mb-1 shadow-lg">
-                    <img src="/hunter.jpg" alt="Hunter" className="w-full h-full object-cover" onError={(e) => e.currentTarget.src = 'https://api.dicebear.com/7.x/avataaars/svg?seed=Hunter'} />
+                    <img src="/hunter.jpg" alt="Hunter" className="w-full h-full object-cover" onError={(e: any) => e.currentTarget.src = 'https://api.dicebear.com/7.x/avataaars/svg?seed=Hunter'} />
                  </div>
                  <span className="text-xs font-bold text-amber-400 uppercase tracking-widest">Hunter</span>
                  <span className="text-xl font-black text-white">{hunterWins}</span>
@@ -796,7 +796,7 @@ export default function GameBoard() {
              <div className="text-stone-500 font-serif italic text-sm">VS</div>
              <div className="flex flex-col items-center">
                  <div className="w-12 h-12 rounded-full overflow-hidden border-2 border-amber-500 bg-stone-800 mb-1 shadow-lg">
-                    <img src="/jess.jpg" alt="Jess" className="w-full h-full object-cover" onError={(e) => e.currentTarget.src = 'https://api.dicebear.com/7.x/avataaars/svg?seed=Jess'} />
+                    <img src="/jess.jpg" alt="Jess" className="w-full h-full object-cover" onError={(e: any) => e.currentTarget.src = 'https://api.dicebear.com/7.x/avataaars/svg?seed=Jess'} />
                  </div>
                  <span className="text-xs font-bold text-amber-400 uppercase tracking-widest">Jess</span>
                  <span className="text-xl font-black text-white">{jessWins}</span>
@@ -813,7 +813,7 @@ export default function GameBoard() {
                   className={`py-3 px-4 rounded-xl font-bold text-xs border transition flex items-center justify-center gap-2 shadow-lg ${myRole === 'player1' ? 'bg-amber-600 border-amber-400 text-white transform scale-105' : 'bg-stone-800 border-stone-700 text-stone-400 hover:bg-stone-700'}`}
                 >
                   <div className="w-6 h-6 rounded-full overflow-hidden border border-current bg-stone-800">
-                    <img src="/hunter.jpg" alt="Hunter" className="w-full h-full object-cover" onError={(e) => e.currentTarget.src = 'https://api.dicebear.com/7.x/avataaars/svg?seed=Hunter'} />
+                    <img src="/hunter.jpg" alt="Hunter" className="w-full h-full object-cover" onError={(e: any) => e.currentTarget.src = 'https://api.dicebear.com/7.x/avataaars/svg?seed=Hunter'} />
                   </div>
                   Hunter (Player 1)
                 </button>
@@ -823,7 +823,7 @@ export default function GameBoard() {
                   className={`py-3 px-4 rounded-xl font-bold text-xs border transition flex items-center justify-center gap-2 shadow-lg ${myRole === 'player2' ? 'bg-amber-600 border-amber-400 text-white transform scale-105' : 'bg-stone-800 border-stone-700 text-stone-400 hover:bg-stone-700'}`}
                 >
                   <div className="w-6 h-6 rounded-full overflow-hidden border border-current bg-stone-800">
-                    <img src="/jess.jpg" alt="Jess" className="w-full h-full object-cover" onError={(e) => e.currentTarget.src = 'https://api.dicebear.com/7.x/avataaars/svg?seed=Jess'} />
+                    <img src="/jess.jpg" alt="Jess" className="w-full h-full object-cover" onError={(e: any) => e.currentTarget.src = 'https://api.dicebear.com/7.x/avataaars/svg?seed=Jess'} />
                   </div>
                   Jess (Player 2)
                 </button>
@@ -900,7 +900,7 @@ export default function GameBoard() {
           {!winner && (
               <div className={`bg-stone-900 border-2 ${isMyTurn ? 'border-emerald-500 shadow-[0_0_15px_rgba(16,185,129,0.5)]' : 'border-amber-500'} rounded-2xl p-3 shadow-2xl flex items-center gap-3 bg-opacity-95 backdrop-blur`}>
                 <div className={`w-8 h-8 rounded-full overflow-hidden border-2 ${isMyTurn ? 'border-emerald-400' : 'border-amber-500'} bg-stone-800 shadow-inner`}>
-                  <img src={isMyTurn ? myAvatar : oppAvatar} alt="Turn Avatar" className="w-full h-full object-cover" onError={(e) => e.currentTarget.src = isMyTurn ? myFallbackAvatar : oppFallbackAvatar} />
+                  <img src={isMyTurn ? myAvatar : oppAvatar} alt="Turn Avatar" className="w-full h-full object-cover" onError={(e: any) => e.currentTarget.src = isMyTurn ? myFallbackAvatar : oppFallbackAvatar} />
                 </div>
                 <div>
                     <h3 className={`font-serif font-black text-sm uppercase tracking-widest ${isMyTurn ? 'text-emerald-400' : 'text-amber-400'}`}>{isMyTurn ? `Your Turn (${myName})` : `${opponentName}'s Turn`}</h3>
@@ -952,7 +952,7 @@ export default function GameBoard() {
               <div>
                 <h4 className="text-xs uppercase font-bold tracking-widest text-amber-500 mb-3">Available Bank Cards</h4>
                 <div className="grid grid-cols-5 gap-4">
-                  {myBank.map((card) => {
+                  {myBank.map((card: any) => {
                     const isSelected = unfreezeSelectedIds.includes(card.runtimeId);
                     return (
                       <div key={card.runtimeId} onClick={() => toggleUnfreezeSelection(card.runtimeId)} className={`flex flex-col items-center cursor-pointer transition transform hover:scale-105 ${isSelected ? 'ring-4 ring-blue-500 rounded-xl scale-105 opacity-50' : ''}`}>
@@ -967,7 +967,7 @@ export default function GameBoard() {
               <div className="border-t border-stone-800 pt-6">
                 <h4 className="text-xs uppercase font-bold tracking-widest text-emerald-400 mb-3">Available Items</h4>
                 <div className="grid grid-cols-5 gap-4">
-                  {myProperties.map((card) => {
+                  {myProperties.map((card: any) => {
                     const isSelected = unfreezeSelectedIds.includes(card.runtimeId);
                     return (
                       <div key={card.runtimeId} onClick={() => toggleUnfreezeSelection(card.runtimeId)} className={`flex flex-col items-center cursor-pointer transition transform hover:scale-105 ${isSelected ? 'ring-4 ring-blue-500 rounded-xl scale-105 opacity-50' : ''}`}>
@@ -1007,7 +1007,7 @@ export default function GameBoard() {
                 const isAny = card.colorSet?.includes("Any") || card.name.toLowerCase().includes("wild any");
                 let finalColors: string[] = [];
                 if (isAny) {
-                    const ownedColors = Array.from(new Set(myProperties.map(c => getCardColor(c))));
+                    const ownedColors = Array.from(new Set(myProperties.map((c: any) => getCardColor(c))));
                     finalColors = ["Brown", "Dark Blue", "Light Green", "Pink", "Orange", "Yellow", "Red", "Light Blue", "Dark Green", "Black"].filter(col => ownedColors.includes(col) && !isSetFull(col, myProperties));
                 } else {
                     finalColors = card.colorSet ? card.colorSet.split("/") : [];
@@ -1024,7 +1024,7 @@ export default function GameBoard() {
                         const newProps = [...myProperties, card];
                         setWildCardColors(newColors);
                         setMyProperties(newProps);
-                        setPlaysRemaining(prev => prev - 1);
+                        setPlaysRemaining((prev: number) => prev - 1);
                         setWildcardSelectionModal(null);
                         
                         await addLogAndSync(`Played wildcard as ${col}.`, { wildCardColors: newColors, playsRemaining: playsRemaining - 1 }, { hand: myHand, properties: newProps, bank: myBank, character: myCharacter, isFrozen: isMyCharacterFrozen });
@@ -1037,7 +1037,7 @@ export default function GameBoard() {
                 });
               })()}
             </div>
-            <button onClick={() => { setMyHand(prev => [...prev, wildcardSelectionModal]); setWildcardSelectionModal(null); }} className="mt-4 bg-stone-700 hover:bg-stone-600 text-white text-xs py-2 px-4 rounded-lg">Cancel</button>
+            <button onClick={() => { setMyHand((prev: any[]) => [...prev, wildcardSelectionModal]); setWildcardSelectionModal(null); }} className="mt-4 bg-stone-700 hover:bg-stone-600 text-white text-xs py-2 px-4 rounded-lg">Cancel</button>
           </div>
         </div>
       )}
@@ -1081,11 +1081,11 @@ export default function GameBoard() {
             <h3 className="text-amber-400 font-serif font-bold text-lg mb-2">Confundo: Choose Your Item to Swap</h3>
             <p className="text-stone-300 text-xs mb-4">Click one of your items on the table to trade away:</p>
             <div className="flex justify-center gap-4 flex-wrap mb-6 max-h-60 overflow-y-auto">
-              {myProperties.map((card) => (
+              {myProperties.map((card: any) => (
                 <div key={card.runtimeId} className="flex flex-col items-center cursor-pointer hover:scale-105 transition"
                   onClick={() => {
                       setConfundoModal({ ...confundoModal, chosenMyCard: card });
-                      const eligibleOppCards = opponentProperties.filter(c => getCardColor(c) !== harryProtectedColor);
+                      const eligibleOppCards = opponentProperties.filter((c: any) => getCardColor(c) !== harryProtectedColor);
                       setTargetSelectionModal({ type: 'levicorpus', actionCard: confundoModal.actionCard, cards: eligibleOppCards });
                   }}>
                   <div className="pointer-events-none">
@@ -1106,7 +1106,7 @@ export default function GameBoard() {
             <h3 className="text-amber-400 font-serif font-bold text-lg mb-2">Select Target</h3>
             <p className="text-stone-300 text-xs mb-4">Click a target from {opponentName}'s items:</p>
             <div className="flex justify-center gap-4 flex-wrap mb-6 max-h-60 overflow-y-auto">
-              {targetSelectionModal.cards.map((card) => (
+              {targetSelectionModal.cards.map((card: any) => (
                 <div key={card.runtimeId || card.colorSet} className="flex flex-col items-center">
                   {targetSelectionModal.type === 'obliviate' ? (
                      <div className="relative cursor-pointer hover:scale-105 transition-transform" onClick={() => handleTargetSelection(card)}>
@@ -1143,7 +1143,7 @@ export default function GameBoard() {
             </div>
             <div className="flex-1 overflow-y-auto p-2">
               <div className="flex flex-wrap justify-center gap-4">
-                {discardPile.map((card, idx) => (
+                {discardPile.map((card: any, idx: number) => (
                   <div key={`${card.runtimeId}-${idx}`} className="pointer-events-none">
                     <PlayingCard name={card.name} type={card.type} colorSet={card.colorSet} value={card.value} rentValues={card.rentValues} effect={card.effect} />
                   </div>
@@ -1167,7 +1167,7 @@ export default function GameBoard() {
             </div>
             <div className="flex-1 overflow-y-auto mb-4 bg-stone-950 p-4 rounded-xl border border-stone-800">
                <div className="flex justify-center gap-4 flex-wrap">
-                 {discardPile.map((card, idx) => (
+                 {discardPile.map((card: any, idx: number) => (
                    <div key={`${card.runtimeId}-${idx}`} onClick={() => handleReparoSelection(card)} className="cursor-pointer hover:scale-105 transition">
                      <div className="pointer-events-none"><PlayingCard name={card.name} type={card.type} colorSet={card.colorSet} value={card.value} effect={card.effect} /></div>
                    </div>
@@ -1185,7 +1185,7 @@ export default function GameBoard() {
             <h3 className="text-amber-400 font-serif font-bold text-lg mb-2">Select Color for Points</h3>
             <p className="text-stone-300 text-xs mb-4">You own items in multiple eligible colors. Which set would you like to collect points for?</p>
             <div className="flex flex-col gap-3">
-              {rentSelectionModal.validColors.map((col) => {
+              {rentSelectionModal.validColors.map((col: string) => {
                 const colorClass = getPropertyColorClass(col);
                 return (
                   <button key={col} onClick={() => handleColorSelectionForRent(col)} className={`${colorClass} hover:opacity-90 font-bold py-3 px-4 rounded-xl shadow-lg transition flex justify-between items-center`}>
@@ -1195,16 +1195,6 @@ export default function GameBoard() {
               })}
             </div>
           </div>
-        </div>
-      )}
-
-      {paymentPrompt && (
-        <div className="absolute bottom-8 left-1/2 transform -translate-x-1/2 bg-red-950 border-2 border-red-500 text-white px-6 py-3 rounded-2xl shadow-2xl z-50 flex items-center gap-4 animate-bounce">
-          <div>
-            <h4 className="font-bold text-sm text-red-400">Payment Required: {paymentPrompt.reason}</h4>
-            <p className="text-xs text-stone-300">Amount Due: <span className="font-bold text-amber-400">{paymentPrompt.amount} points</span>. Open Bank to pay.</p>
-          </div>
-          <button onClick={() => setIsPaymentVaultOpen(true)} className="bg-amber-600 hover:bg-amber-500 text-white text-xs font-bold px-4 py-2 rounded-xl shadow">Open Bank</button>
         </div>
       )}
 
@@ -1249,7 +1239,7 @@ export default function GameBoard() {
               <div>
                 <h4 className="text-xs uppercase font-bold tracking-widest text-amber-500 mb-2">My Bank Cards</h4>
                 <div className="grid grid-cols-4 gap-4">
-                  {myBank.map((card) => (
+                  {myBank.map((card: any) => (
                     <div key={card.runtimeId} className={`flex flex-col items-center ${playerPaymentPrompt ? 'cursor-pointer hover:scale-105 transition' : ''}`} onClick={() => { if (playerPaymentPrompt) handlePlayerPayToOpponent(card, 'bank'); }}>
                       <div className={playerPaymentPrompt ? 'pointer-events-none' : ''}><PlayingCard name={card.name} type={card.type} value={card.value} effect={card.effect} isBank={true} /></div>
                     </div>
@@ -1261,10 +1251,10 @@ export default function GameBoard() {
               <div className="border-t border-stone-800 pt-4">
                 <h4 className="text-xs uppercase font-bold tracking-widest text-emerald-400 mb-2">My Items</h4>
                 <div className="grid grid-cols-4 gap-4">
-                  {myProperties.map((card) => (
+                  {myProperties.map((card: any) => (
                     <div key={card.runtimeId} className={`flex flex-col items-center ${playerPaymentPrompt ? 'cursor-pointer hover:scale-105 transition' : ''}`} onClick={() => { if (playerPaymentPrompt && getCardColor(card) !== harryProtectedColor) handlePlayerPayToOpponent(card, 'property'); }}>
                       <div className={playerPaymentPrompt ? 'pointer-events-none' : ''}>
-                        <PlayingCard name={card.name} type={card.type} colorSet={card.colorSet} value={card.value} rentValues={card.rentValues} activeWildColor={wildCardColors[card.runtimeId]} isRotated={wildCardRotations[card.runtimeId]} onFlip={(e) => {
+                        <PlayingCard name={card.name} type={card.type} colorSet={card.colorSet} value={card.value} rentValues={card.rentValues} activeWildColor={wildCardColors[card.runtimeId]} isRotated={wildCardRotations[card.runtimeId]} onFlip={(e: any) => {
                             if (!playerPaymentPrompt) {
                                if (e) e.stopPropagation();
                                if (card.colorSet?.includes("/")) toggleWildcardColor(card);
@@ -1283,50 +1273,6 @@ export default function GameBoard() {
         </div>
       )}
 
-      {/* OPPONENT PAYMENT VAULT MODAL */}
-      {isPaymentVaultOpen && (
-        <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-50 p-6">
-          <div className="bg-stone-900 border-2 border-red-500 rounded-2xl p-6 max-w-3xl w-full shadow-2xl flex flex-col max-h-[85vh]">
-            <div className="flex justify-between items-center mb-4 border-b border-stone-800 pb-3">
-              <div>
-                <h3 className="text-red-400 font-serif font-bold text-lg">{opponentName}'s Bank</h3>
-                <p className="text-stone-400 text-xs">
-                  {paymentPrompt && <span className="text-red-400 font-bold">(Owed: {paymentPrompt.amount} points)</span>}
-                  <span className="block mt-1 text-white">Click a card to take it as payment.</span>
-                </p>
-              </div>
-              <button onClick={() => setIsPaymentVaultOpen(false)} className="bg-stone-800 hover:bg-stone-700 text-white px-3 py-1 rounded-lg text-xs font-bold">Close</button>
-            </div>
-
-            <div className="flex-1 overflow-y-auto space-y-4 p-2">
-              <div>
-                <h4 className="text-xs uppercase font-bold tracking-widest text-amber-500 mb-2">{opponentName}'s Bank Cards</h4>
-                <div className="grid grid-cols-4 gap-4">
-                  {opponentBank.map((card) => (
-                    <div key={card.runtimeId} className="flex flex-col items-center hover:scale-105 transition cursor-pointer" onClick={() => { if (paymentPrompt) handlePayWithCard(card, 'bank'); }}>
-                      <div className="pointer-events-none"><PlayingCard name={card.name} type={card.type} value={card.value} effect={card.effect} isBank={true} /></div>
-                    </div>
-                  ))}
-                  {opponentBank.length === 0 && <span className="text-stone-500 italic text-xs col-span-4">Bank is empty</span>}
-                </div>
-              </div>
-
-              <div className="border-t border-stone-800 pt-4">
-                <h4 className="text-xs uppercase font-bold tracking-widest text-red-400 mb-2">{opponentName}'s Items</h4>
-                <div className="grid grid-cols-4 gap-4">
-                  {opponentProperties.filter(c => getCardColor(c) !== harryProtectedColor).map((card) => (
-                    <div key={card.runtimeId} className="flex flex-col items-center hover:scale-105 transition cursor-pointer" onClick={() => { if (paymentPrompt) handlePayWithCard(card, 'property'); }}>
-                      <div className="pointer-events-none"><PlayingCard name={card.name} type={card.type} colorSet={card.colorSet} value={card.value} rentValues={card.rentValues} /></div>
-                    </div>
-                  ))}
-                  {opponentProperties.filter(c => getCardColor(c) !== harryProtectedColor).length === 0 && <span className="text-stone-500 italic text-xs col-span-4">No eligible items played</span>}
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-
       {/* MAIN LAYOUT */}
       <div className="flex flex-row gap-6 flex-1 overflow-hidden">
         
@@ -1337,7 +1283,7 @@ export default function GameBoard() {
             <div className="flex justify-between items-center px-4 mb-1">
               <div className="flex items-center gap-2">
                   <div className={`w-6 h-6 rounded-full overflow-hidden border-2 ${!isMyTurn ? 'border-amber-400' : 'border-stone-700'}`}>
-                     <img src={oppAvatar} alt="Opponent" className="w-full h-full object-cover" onError={(e) => e.currentTarget.src = oppFallbackAvatar} />
+                     <img src={oppAvatar} alt="Opponent" className="w-full h-full object-cover" onError={(e: any) => e.currentTarget.src = oppFallbackAvatar} />
                   </div>
                   <h2 className="text-green-300/50 uppercase tracking-widest text-xs">{opponentName}'s Area</h2>
               </div>
@@ -1345,11 +1291,11 @@ export default function GameBoard() {
             
             <div className="flex justify-center gap-2 mb-2">
               {winner ? (
-                  opponentHand.map((card, idx) => (
+                  opponentHand.map((card: any, idx: number) => (
                       <div key={`${card.runtimeId}-${idx}`} className="animate-draw-opponent"><PlayingCard name={card.name} type={card.type} colorSet={card.colorSet} value={card.value} effect={card.effect} /></div>
                   ))
               ) : opponentHand.length > 0 ? (
-                opponentHand.map((_, i) => (
+                opponentHand.map((_: any, i: number) => (
                   <div key={`opp-hand-${i}`} className="animate-draw-opponent"><PlayingCard name="HP DEAL" type="back" /></div>
                 ))
               ) : (
@@ -1381,7 +1327,7 @@ export default function GameBoard() {
                       const setCards = groupedOpponentProperties[colorKey];
                       const isWinningSet = winner && isCompleteSet(colorKey, opponentProperties);
                       
-                      const sortedSetCards = [...setCards].sort((a, b) => {
+                      const sortedSetCards = [...setCards].sort((a: any, b: any) => {
                           const aIsAny = a.colorSet?.includes("Any") || a.name.toLowerCase().includes("wild any");
                           const bIsAny = b.colorSet?.includes("Any") || b.name.toLowerCase().includes("wild any");
                           if (aIsAny && !bIsAny) return -1;
@@ -1477,7 +1423,7 @@ export default function GameBoard() {
                       const setCards = groupedMyProperties[colorKey];
                       const isWinningSet = winner && isCompleteSet(colorKey, myProperties);
 
-                      const sortedSetCards = [...setCards].sort((a, b) => {
+                      const sortedSetCards = [...setCards].sort((a: any, b: any) => {
                           const aIsAny = a.colorSet?.includes("Any") || a.name.toLowerCase().includes("wild any");
                           const bIsAny = b.colorSet?.includes("Any") || b.name.toLowerCase().includes("wild any");
                           if (aIsAny && !bIsAny) return -1;
@@ -1504,7 +1450,7 @@ export default function GameBoard() {
                                 <div className="scale-90 origin-top-left shadow-2xl">
                                   <PlayingCard 
                                     name={card.name} type={card.type} colorSet={card.colorSet} value={card.value} rentValues={card.rentValues} activeWildColor={wildCardColors[card.runtimeId]} isRotated={wildCardRotations[card.runtimeId]} inHand={false}
-                                    onFlip={(e) => {
+                                    onFlip={(e: any) => {
                                       if (e) e.stopPropagation();
                                       if (card.colorSet?.includes("/")) toggleWildcardColor(card);
                                       else setTableWildcardEditModal(card);
@@ -1525,7 +1471,7 @@ export default function GameBoard() {
                     <div className="flex flex-col items-center gap-2 bg-purple-950/60 border border-purple-500/50 rounded-xl p-2 shrink-0 my-auto animate-play-player">
                       <span className="text-[9px] text-purple-300 uppercase font-bold tracking-widest">Table Actions</span>
                       <div className="flex gap-2">
-                        {tableActions.map(card => (
+                        {tableActions.map((card: any) => (
                           <div key={card.runtimeId} onClick={() => playTableAction(card)} className="scale-75 origin-center cursor-pointer hover:scale-80 transition"><PlayingCard name={card.name} type={card.type} value={card.value} effect={card.effect} /></div>
                         ))}
                       </div>
@@ -1548,14 +1494,14 @@ export default function GameBoard() {
             
             <div className="flex items-center justify-center gap-2 mb-1">
                  <div className={`w-6 h-6 rounded-full overflow-hidden border-2 ${isMyTurn ? 'border-amber-400' : 'border-stone-700'}`}>
-                    <img src={myAvatar} alt="Me" className="w-full h-full object-cover" onError={(e) => e.currentTarget.src = myFallbackAvatar} />
+                    <img src={myAvatar} alt="Me" className="w-full h-full object-cover" onError={(e: any) => e.currentTarget.src = myFallbackAvatar} />
                  </div>
                  <h2 className="text-green-300/50 uppercase tracking-widest text-xs">{isDiscardingExcess ? "Select Excess Cards to Discard (Max 7)" : `${myName}'s Hand (Click card to play - Drag to rearrange)`}</h2>
             </div>
             <div className="flex justify-center gap-3 h-40">
               {myHand.length > 0 ? (
-                myHand.map((card, idx) => (
-                  <div key={card.runtimeId} className="animate-draw-player cursor-grab active:cursor-grabbing" draggable onDragStart={(e) => { setDraggedCardIndex(idx); e.dataTransfer.effectAllowed = 'move'; }} onDragOver={(e) => { e.preventDefault(); e.dataTransfer.dropEffect = 'move'; }} onDrop={(e) => { e.preventDefault(); if (draggedCardIndex === null || draggedCardIndex === idx) return; const newHand = [...myHand]; const [draggedCard] = newHand.splice(draggedCardIndex, 1); newHand.splice(idx, 0, draggedCard); setMyHand(newHand); setDraggedCardIndex(null); }} onClick={() => handleCardClick(card)}>
+                myHand.map((card: any, idx: number) => (
+                  <div key={card.runtimeId} className="animate-draw-player cursor-grab active:cursor-grabbing" draggable onDragStart={(e: any) => { setDraggedCardIndex(idx); e.dataTransfer.effectAllowed = 'move'; }} onDragOver={(e: any) => { e.preventDefault(); e.dataTransfer.dropEffect = 'move'; }} onDrop={(e: any) => { e.preventDefault(); if (draggedCardIndex === null || draggedCardIndex === idx) return; const newHand = [...myHand]; const [draggedCard] = newHand.splice(draggedCardIndex, 1); newHand.splice(idx, 0, draggedCard); setMyHand(newHand); setDraggedCardIndex(null); }} onClick={() => handleCardClick(card)}>
                     <PlayingCard name={card.name} type={card.type} colorSet={card.colorSet} value={card.value} rentValues={card.rentValues} effect={card.effect} activeWildColor={wildCardColors[card.runtimeId]} inHand={true} />
                   </div>
                 ))
@@ -1574,7 +1520,7 @@ export default function GameBoard() {
             <span className="text-[9px] bg-amber-600/20 text-amber-300 px-2 py-0.5 rounded border border-amber-500/30 font-mono">LIVE</span>
           </div>
           <div className="flex-1 overflow-y-auto space-y-2 pr-1 text-xs text-stone-300">
-            {gameLog.map((logEntry, idx) => (
+            {gameLog.map((logEntry: string, idx: number) => (
               <div key={idx} className="bg-stone-900/90 p-2 rounded-lg border border-stone-800 leading-snug font-sans text-[11px] shadow-sm animate-play-player">
                 <span className="text-amber-500 font-mono text-[9px] block mb-0.5">#{gameLog.length - idx}</span>
                 {logEntry}
@@ -1764,14 +1710,14 @@ function PlayingCard({
     return (
       <div className="w-28 h-40 rounded-xl shadow-xl border border-stone-400 flex flex-col overflow-hidden bg-stone-50 text-stone-900 relative group transform transition hover:-translate-y-2 cursor-pointer">
         <div className={`transition-transform duration-500 flex flex-col w-full h-full justify-between ${isBottomActive ? 'rotate-180' : 'rotate-0'}`}>
-          <div className={`h-8 ${topClass} w-full flex items-center ${value ? 'justify-end pr-1' : 'justify-center'} px-1 text-center shrink-0 relative`} onClick={(e) => { if(onFlip) onFlip(e); }}>
+          <div className={`h-8 ${topClass} w-full flex items-center ${value ? 'justify-end pr-1' : 'justify-center'} px-1 text-center shrink-0 relative`} onClick={(e: any) => { if(onFlip) onFlip(e); }}>
             {value !== undefined && value > 0 && <span className="absolute left-1 top-1.5 w-5 h-5 bg-stone-900 text-amber-400 font-bold text-[10px] rounded-full flex items-center justify-center shadow border border-amber-500/50 z-10">{value}</span>}
             <span className={`text-[9px] font-black uppercase tracking-widest text-center ${value ? 'w-[75%]' : 'w-full'}`}>WILD</span>
           </div>
 
           <div className="flex-1 flex items-stretch relative text-[7.5px] overflow-hidden">
             <div className="w-1/2 flex flex-col justify-around p-1 border-r border-stone-300">
-              {topRents.map((rent, idx) => {
+              {topRents.map((rent: number, idx: number) => {
                 const count = idx + 1;
                 return (
                   <div key={idx} className="flex justify-between items-center px-1 font-semibold">
@@ -1790,7 +1736,7 @@ function PlayingCard({
               <div className="w-2 h-full flex flex-col justify-between items-center py-1"><div className={`w-1.5 flex-1 ${topClass} rounded-full`}></div><div className={`w-1.5 flex-1 ${bottomClass} rounded-full`}></div></div>
             </div>
             <div className="w-1/2 flex flex-col justify-around p-1 rotate-180 bg-stone-100/50">
-              {bottomRents.map((rent, idx) => {
+              {bottomRents.map((rent: number, idx: number) => {
                 const count = idx + 1;
                 return (
                   <div key={idx} className="flex justify-between items-center px-1 font-semibold">
@@ -1807,7 +1753,7 @@ function PlayingCard({
             </div>
           </div>
 
-          <div className={`h-8 ${bottomClass} w-full flex items-center ${value ? 'justify-end pr-1' : 'justify-center'} px-1 text-center rotate-180 shrink-0 relative`} onClick={(e) => { if(onFlip) onFlip(e); }}>
+          <div className={`h-8 ${bottomClass} w-full flex items-center ${value ? 'justify-end pr-1' : 'justify-center'} px-1 text-center rotate-180 shrink-0 relative`} onClick={(e: any) => { if(onFlip) onFlip(e); }}>
             {value !== undefined && value > 0 && <span className="absolute left-1 top-1.5 w-5 h-5 bg-stone-900 text-amber-400 font-bold text-[10px] rounded-full flex items-center justify-center shadow border border-amber-500/50 z-10">{value}</span>}
             <span className={`text-[9px] font-black uppercase tracking-widest text-center ${value ? 'w-[75%]' : 'w-full'}`}>WILD</span>
           </div>
