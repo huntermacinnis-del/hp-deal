@@ -63,6 +63,7 @@ export default function GameBoard() {
   const [selectedActionCard, setSelectedActionCard] = useState<any | null>(null);
   const [isMyBankOpen, setIsMyBankOpen] = useState<boolean>(false); 
   const [isPaymentVaultOpen, setIsPaymentVaultOpen] = useState<boolean>(false); 
+  const [paymentPrompt, setPaymentPrompt] = useState<{ amount: number; reason: string } | null>(null);
   const [playerPaymentPrompt, setPlayerPaymentPrompt] = useState<{ amount: number; reason: string } | null>(null);
   const [rentSelectionModal, setRentSelectionModal] = useState<{ validColors: string[]; actionCard: any } | null>(null);
   
@@ -86,7 +87,7 @@ export default function GameBoard() {
   const [isDiscardingExcess, setIsDiscardingExcess] = useState<boolean>(false);
   const [spellAnimation, setSpellAnimation] = useState<{name: string, player: string} | null>(null);
 
-  // Derived state helpers for seamless typing
+  // Derived state helpers for typing
   const isMyTurn = activeTurn === myRole;
   const myName = myRole === 'player1' ? "Hunter" : "Jess";
   const opponentName = myRole === 'player1' ? "Jess" : "Hunter";
@@ -746,6 +747,40 @@ export default function GameBoard() {
     return sampleCard.rentValues[index];
   };
 
+  const handlePayWithCard = async (cardToPay: any, source: 'bank' | 'property') => {
+    let newOppBank = opponentBank;
+    let newOppProps = opponentProperties;
+    let newMyBank = myBank;
+    let newMyProps = myProperties;
+    let logMsg = "";
+
+    if (source === 'property') {
+        newOppProps = opponentProperties.filter((c: any) => c.runtimeId !== cardToPay.runtimeId);
+        newMyProps = [...myProperties, cardToPay];
+        logMsg = `${opponentName} surrendered item: ${cardToPay.name}`;
+    } else {
+        newOppBank = opponentBank.filter((c: any) => c.runtimeId !== cardToPay.runtimeId);
+        newMyBank = [...myBank, cardToPay];
+        logMsg = `${opponentName} paid a card from bank.`;
+    }
+    
+    if (paymentPrompt) {
+      const cardValue = Number(cardToPay.value) || 1;
+      const remaining = paymentPrompt.amount - cardValue;
+      const remainingAssets = newOppBank.reduce((sum: number, c: any) => sum + (Number(c.value) || 0), 0) + 
+                              newOppProps.filter((c: any) => getCardColor(c) !== harryProtectedColor).reduce((sum: number, c: any) => sum + (Number(c.value) || 1), 0);
+
+      if (remaining <= 0 || remainingAssets === 0) {
+        setPaymentPrompt(null);
+        setIsPaymentVaultOpen(false);
+        await addLogAndSync(`${logMsg} Payment complete.`, { pendingAttack: null }, { hand: myHand, bank: newMyBank, properties: newMyProps, character: myCharacter, isFrozen: isMyCharacterFrozen }, { bank: newOppBank, properties: newOppProps, hand: opponentHand, character: opponentCharacter, isFrozen: isOpponentFrozen });
+      } else {
+        setPaymentPrompt({ ...paymentPrompt, amount: remaining });
+        await addLogAndSync(`${logMsg}`, {}, { hand: myHand, bank: newMyBank, properties: newMyProps, character: myCharacter, isFrozen: isMyCharacterFrozen }, { bank: newOppBank, properties: newOppProps, hand: opponentHand, character: opponentCharacter, isFrozen: isOpponentFrozen });
+      }
+    }
+  };
+
   const handlePlayerPayToOpponent = async (cardToPay: any, source: 'bank' | 'property') => {
     let newMyBank = myBank;
     let newMyProps = myProperties;
@@ -968,349 +1003,6 @@ export default function GameBoard() {
           <div className="flex gap-2 shrink-0">
              <button onClick={playerDefenseWindow.onCounterProtego} className="bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold px-4 py-2 rounded-xl shadow transition">🛡️ Play Protego</button>
              <button onClick={playerDefenseWindow.onAccept} className="bg-red-700 hover:bg-red-600 text-white text-xs font-bold px-4 py-2 rounded-xl shadow transition">💥 Take Hit</button>
-          </div>
-        </div>
-      )}
-
-      {isUnfreezeModalOpen && (
-        <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-50 p-6">
-          <div className="bg-stone-900 border-2 border-blue-500 rounded-2xl p-6 max-w-4xl w-full shadow-2xl flex flex-col max-h-[85vh]">
-            <div className="flex justify-between items-center mb-4 border-b border-stone-800 pb-3">
-              <div>
-                <h3 className="text-blue-400 font-serif font-bold text-lg">Lift Petrificus Totalus</h3>
-                <p className="text-stone-400 text-xs">Select cards from your Bank or Items to discard (Must total exactly or just over 10 points).</p>
-              </div>
-              <div className="flex items-center gap-4">
-                <div className="text-right">
-                  <span className="block text-[10px] text-stone-400 uppercase tracking-widest font-bold">Selected Points</span>
-                  <span className={`text-xl font-black ${unfreezeTotalPoints >= 10 ? 'text-emerald-400' : 'text-amber-400'}`}>{unfreezeTotalPoints} / 10</span>
-                </div>
-                <button onClick={confirmUnfreeze} disabled={unfreezeTotalPoints < 10} className={`font-bold py-2 px-6 rounded-xl shadow transition text-sm ${unfreezeTotalPoints >= 10 ? 'bg-emerald-600 hover:bg-emerald-500 text-white' : 'bg-stone-700 text-stone-500 cursor-not-allowed'}`}>Confirm Discard</button>
-                <button onClick={cancelUnfreeze} className="bg-stone-800 hover:bg-stone-700 text-white px-4 py-2 rounded-xl text-sm font-bold transition">Cancel</button>
-              </div>
-            </div>
-
-            <div className="flex-1 overflow-y-auto space-y-6 p-2">
-              <div>
-                <h4 className="text-xs uppercase font-bold tracking-widest text-amber-500 mb-3">Available Bank Cards</h4>
-                <div className="grid grid-cols-5 gap-4">
-                  {myBank.map((card: any) => {
-                    const isSelected = unfreezeSelectedIds.includes(card.runtimeId);
-                    return (
-                      <div key={card.runtimeId} onClick={() => toggleUnfreezeSelection(card.runtimeId)} className={`flex flex-col items-center cursor-pointer transition transform hover:scale-105 ${isSelected ? 'ring-4 ring-blue-500 rounded-xl scale-105 opacity-50' : ''}`}>
-                        <PlayingCard name={card.name} type={card.type} value={card.value} effect={card.effect} isBank={true} />
-                      </div>
-                    );
-                  })}
-                  {myBank.length === 0 && <span className="text-stone-500 italic text-xs col-span-5">Your bank is empty</span>}
-                </div>
-              </div>
-
-              <div className="border-t border-stone-800 pt-6">
-                <h4 className="text-xs uppercase font-bold tracking-widest text-emerald-400 mb-3">Available Items</h4>
-                <div className="grid grid-cols-5 gap-4">
-                  {myProperties.map((card: any) => {
-                    const isSelected = unfreezeSelectedIds.includes(card.runtimeId);
-                    return (
-                      <div key={card.runtimeId} onClick={() => toggleUnfreezeSelection(card.runtimeId)} className={`flex flex-col items-center cursor-pointer transition transform hover:scale-105 ${isSelected ? 'ring-4 ring-blue-500 rounded-xl scale-105 opacity-50' : ''}`}>
-                        <PlayingCard name={card.name} type={card.type} colorSet={card.colorSet} value={card.value} rentValues={card.rentValues} activeWildColor={wildCardColors[card.runtimeId]} isRotated={wildCardRotations[card.runtimeId]} />
-                      </div>
-                    );
-                  })}
-                  {myProperties.length === 0 && <span className="text-stone-500 italic text-xs col-span-5">No items available</span>}
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {cedricChoiceModal && (
-        <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-50 p-6">
-          <div className="bg-stone-900 border-2 border-yellow-500 rounded-2xl p-6 max-w-md w-full shadow-2xl text-center">
-            <h3 className="text-yellow-400 font-serif font-bold text-lg mb-2">Cedric Diggory's Ability</h3>
-            <p className="text-stone-300 text-xs mb-6">Choose where to draw your 2 turn cards from (both must come from the same pile):</p>
-            <div className="flex flex-col gap-3">
-              <button onClick={() => { setCedricChoiceModal(false); executeNormalDraw(); }} className="bg-emerald-700 hover:bg-emerald-600 text-white font-bold py-3 px-4 rounded-xl shadow transition text-xs uppercase">Draw 2 Cards from Draw Pile</button>
-              <button onClick={executeCedricDrawFromDiscard} className="bg-yellow-600 hover:bg-yellow-500 text-stone-950 font-bold py-3 px-4 rounded-xl shadow transition text-xs uppercase">Draw 2 Top Cards from Discard Pile ({discardPile.length} available)</button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {wildcardSelectionModal && (
-        <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-50 p-6">
-          <div className="bg-stone-900 border-2 border-amber-500 rounded-2xl p-6 max-w-sm w-full shadow-2xl text-center">
-            <h3 className="text-amber-400 font-serif font-bold text-lg mb-2">Choose Wildcard Color</h3>
-            <p className="text-stone-300 text-xs mb-4">Select which color this wildcard represents on your table:</p>
-            <div className="flex flex-col gap-2.5 max-h-60 overflow-y-auto">
-              {(() => {
-                const card = wildcardSelectionModal;
-                const isAny = card.colorSet?.includes("Any") || card.name.toLowerCase().includes("wild any");
-                let finalColors: string[] = [];
-                if (isAny) {
-                    const ownedColors = Array.from(new Set(myProperties.map((c: any) => getCardColor(c))));
-                    finalColors = ["Brown", "Dark Blue", "Light Green", "Pink", "Orange", "Yellow", "Red", "Light Blue", "Dark Green", "Black"].filter(col => ownedColors.includes(col) && !isSetFull(col, myProperties));
-                } else {
-                    finalColors = card.colorSet ? card.colorSet.split("/") : [];
-                    finalColors = finalColors.filter(col => !isSetFull(col, myProperties));
-                }
-
-                if (finalColors.length === 0 && !isAny) finalColors = card.colorSet ? card.colorSet.split("/") : [];
-
-                return finalColors.map((col: string) => {
-                  const colorClass = getPropertyColorClass(col);
-                  return (
-                    <button key={col} onClick={async () => {
-                        const newColors = { ...wildCardColors, [card.runtimeId]: col };
-                        const newProps = [...myProperties, card];
-                        setWildCardColors(newColors);
-                        setMyProperties(newProps);
-                        setPlaysRemaining((prev: number) => prev - 1);
-                        setWildcardSelectionModal(null);
-                        
-                        await addLogAndSync(`Played wildcard as ${col}.`, { wildCardColors: newColors, playsRemaining: playsRemaining - 1 }, { hand: myHand, properties: newProps, bank: myBank, character: myCharacter, isFrozen: isMyCharacterFrozen });
-                      }}
-                      className={`${colorClass} hover:opacity-90 font-bold py-3 px-4 rounded-xl shadow transition text-xs uppercase tracking-wider flex justify-between items-center`}
-                    >
-                      <span>Play as {col}</span><span className="bg-black/30 px-2 py-0.5 rounded text-[10px]">Select</span>
-                    </button>
-                  );
-                });
-              })()}
-            </div>
-            <button onClick={() => { setMyHand((prev: any[]) => [...prev, wildcardSelectionModal]); setWildcardSelectionModal(null); }} className="mt-4 bg-stone-700 hover:bg-stone-600 text-white text-xs py-2 px-4 rounded-lg">Cancel</button>
-          </div>
-        </div>
-      )}
-
-      {tableWildcardEditModal && (
-        <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-50 p-6">
-          <div className="bg-stone-900 border-2 border-amber-500 rounded-2xl p-6 max-w-sm w-full shadow-2xl text-center">
-            <h3 className="text-amber-400 font-serif font-bold text-lg mb-2">Change Wildcard Color</h3>
-            <p className="text-stone-300 text-xs mb-4">Select a new color for this wildcard:</p>
-            <div className="flex flex-col gap-2.5 max-h-60 overflow-y-auto">
-              {(() => {
-                const card = tableWildcardEditModal;
-                const isAny = card.colorSet?.includes("Any") || card.name.toLowerCase().includes("wild any");
-                let finalColors: string[] = isAny ? ["Brown", "Dark Blue", "Light Green", "Pink", "Orange", "Yellow", "Red", "Light Blue", "Dark Green", "Black"] : (card.colorSet ? card.colorSet.split("/") : []);
-
-                return finalColors.map((col: string) => {
-                  const colorClass = getPropertyColorClass(col);
-                  return (
-                    <button key={col} onClick={async () => {
-                        const newColors = { ...wildCardColors, [card.runtimeId]: col };
-                        setWildCardColors(newColors);
-                        setTableWildcardEditModal(null);
-                        await addLogAndSync(`Changed wildcard color to ${col}.`, { wildCardColors: newColors });
-                      }}
-                      className={`${colorClass} hover:opacity-90 font-bold py-3 px-4 rounded-xl shadow transition text-xs uppercase tracking-wider flex justify-between items-center`}
-                    >
-                      <span>Change to {col}</span><span className="bg-black/30 px-2 py-0.5 rounded text-[10px]">Select</span>
-                    </button>
-                  );
-                });
-              })()}
-            </div>
-            <button onClick={() => setTableWildcardEditModal(null)} className="mt-4 bg-stone-700 hover:bg-stone-600 text-white text-xs py-2 px-4 rounded-lg">Cancel</button>
-          </div>
-        </div>
-      )}
-
-      {confundoModal && (
-        <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-50 p-6">
-          <div className="bg-stone-900 border-2 border-amber-500 rounded-2xl p-6 max-w-xl w-full shadow-2xl text-center">
-            <h3 className="text-amber-400 font-serif font-bold text-lg mb-2">Confundo: Choose Your Item to Swap</h3>
-            <p className="text-stone-300 text-xs mb-4">Click one of your items on the table to trade away:</p>
-            <div className="flex justify-center gap-4 flex-wrap mb-6 max-h-60 overflow-y-auto">
-              {myProperties.map((card: any) => (
-                <div key={card.runtimeId} className="flex flex-col items-center cursor-pointer hover:scale-105 transition"
-                  onClick={() => {
-                      setConfundoModal({ ...confundoModal, chosenMyCard: card });
-                      const eligibleOppCards = opponentProperties.filter((c: any) => getCardColor(c) !== harryProtectedColor);
-                      setTargetSelectionModal({ type: 'levicorpus', actionCard: confundoModal.actionCard, cards: eligibleOppCards });
-                  }}>
-                  <div className="pointer-events-none">
-                     <PlayingCard name={card.name} type={card.type} colorSet={card.colorSet} value={card.value} rentValues={card.rentValues} />
-                  </div>
-                </div>
-              ))}
-              {myProperties.length === 0 && <p className="text-stone-500 italic text-xs">You have no items played.</p>}
-            </div>
-            <button onClick={() => setConfundoModal(null)} className="bg-stone-700 hover:bg-stone-600 text-white text-xs py-2 px-4 rounded-lg">Cancel</button>
-          </div>
-        </div>
-      )}
-
-      {targetSelectionModal && confundoModal === null && (
-        <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-50 p-6">
-          <div className="bg-stone-900 border-2 border-amber-500 rounded-2xl p-6 max-w-xl w-full shadow-2xl text-center">
-            <h3 className="text-amber-400 font-serif font-bold text-lg mb-2">Select Target</h3>
-            <p className="text-stone-300 text-xs mb-4">Click a target from {opponentName}'s items:</p>
-            <div className="flex justify-center gap-4 flex-wrap mb-6 max-h-60 overflow-y-auto">
-              {targetSelectionModal.cards.map((card: any) => (
-                <div key={card.runtimeId || card.colorSet} className="flex flex-col items-center">
-                  {targetSelectionModal.type === 'obliviate' ? (
-                     <div className="relative cursor-pointer hover:scale-105 transition-transform" onClick={() => handleTargetSelection(card)}>
-                        <div className="pointer-events-none"><PlayingCard name={`${card.colorSet} Set`} type={card.type} colorSet={card.colorSet} value={card.value} rentValues={card.rentValues} /></div>
-                        <div className="absolute inset-0 bg-black/50 border-4 border-amber-500 flex items-center justify-center rounded-xl pointer-events-none">
-                            <span className="text-white font-bold uppercase tracking-widest rotate-[-15deg] shadow-2xl text-lg">FULL SET</span>
-                        </div>
-                     </div>
-                  ) : (
-                     <div className="cursor-pointer hover:scale-105 transition" onClick={() => {
-                        if (confundoModal && confundoModal.chosenMyCard) handleConfundoSelectOpponentCard(card);
-                        else handleTargetSelection(card);
-                     }}>
-                        <div className="pointer-events-none"><PlayingCard name={card.name} type={card.type} colorSet={card.colorSet} value={card.value} rentValues={card.rentValues} /></div>
-                     </div>
-                  )}
-                </div>
-              ))}
-            </div>
-            <button onClick={() => setTargetSelectionModal(null)} className="bg-stone-700 hover:bg-stone-600 text-white text-xs py-2 px-4 rounded-lg">Cancel</button>
-          </div>
-        </div>
-      )}
-
-      {isDiscardModalOpen && (
-        <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-50 p-6">
-          <div className="bg-stone-900 border-2 border-emerald-500 rounded-2xl p-6 max-w-4xl w-full shadow-2xl flex flex-col max-h-[85vh]">
-            <div className="flex justify-between items-center mb-4 border-b border-stone-800 pb-3">
-              <div>
-                <h3 className="text-emerald-400 font-serif font-bold text-lg">Discard Pile</h3>
-                <p className="text-stone-400 text-xs">Total Cards: <span className="text-white font-bold">{discardPile.length}</span></p>
-              </div>
-              <button onClick={() => setIsDiscardModalOpen(false)} className="bg-stone-800 hover:bg-stone-700 text-white px-3 py-1 rounded-lg text-xs font-bold">Close</button>
-            </div>
-            <div className="flex-1 overflow-y-auto p-2">
-              <div className="flex flex-wrap justify-center gap-4">
-                {discardPile.map((card: any, idx: number) => (
-                  <div key={`${card.runtimeId}-${idx}`} className="pointer-events-none">
-                    <PlayingCard name={card.name} type={card.type} colorSet={card.colorSet} value={card.value} rentValues={card.rentValues} effect={card.effect} />
-                  </div>
-                ))}
-                {discardPile.length === 0 && <span className="text-stone-500 italic text-xs w-full text-center">Discard pile is empty</span>}
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {reparoModal && (
-        <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-50 p-6">
-          <div className="bg-stone-900 border-2 border-purple-500 rounded-2xl p-6 max-w-4xl w-full shadow-2xl text-center flex flex-col max-h-[85vh]">
-            <div className="mb-4 shrink-0 flex justify-between items-center">
-               <div className="text-left">
-                   <h3 className="text-purple-400 font-serif font-bold text-lg mb-1">Reparo: Discard Pile Recovery</h3>
-                   <p className="text-stone-300 text-xs">Click any card from the discard pile to recover it to your hand/table.</p>
-               </div>
-               <button onClick={() => setReparoModal(null)} className="bg-stone-700 hover:bg-stone-600 text-white text-xs py-2 px-4 rounded-lg">Cancel</button>
-            </div>
-            <div className="flex-1 overflow-y-auto mb-4 bg-stone-950 p-4 rounded-xl border border-stone-800">
-               <div className="flex justify-center gap-4 flex-wrap">
-                 {discardPile.map((card: any, idx: number) => (
-                   <div key={`${card.runtimeId}-${idx}`} onClick={() => handleReparoSelection(card)} className="cursor-pointer hover:scale-105 transition">
-                     <div className="pointer-events-none"><PlayingCard name={card.name} type={card.type} colorSet={card.colorSet} value={card.value} effect={card.effect} /></div>
-                   </div>
-                 ))}
-                 {discardPile.length === 0 && <p className="text-stone-500 italic text-xs w-full text-center">Discard pile is empty.</p>}
-               </div>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {rentSelectionModal && (
-        <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50">
-          <div className="bg-stone-900 border-2 border-amber-500 rounded-2xl p-6 max-w-sm text-center shadow-2xl">
-            <h3 className="text-amber-400 font-serif font-bold text-lg mb-2">Select Color for Points</h3>
-            <p className="text-stone-300 text-xs mb-4">You own items in multiple eligible colors. Which set would you like to collect points for?</p>
-            <div className="flex flex-col gap-3">
-              {rentSelectionModal.validColors.map((col: string) => {
-                const colorClass = getPropertyColorClass(col);
-                return (
-                  <button key={col} onClick={() => handleColorSelectionForRent(col)} className={`${colorClass} hover:opacity-90 font-bold py-3 px-4 rounded-xl shadow-lg transition flex justify-between items-center`}>
-                    <span>Charge Points for {col}</span><span className="bg-black/40 px-2 py-0.5 rounded text-xs font-black">{calculatePointsForColor(col)} pts</span>
-                  </button>
-                );
-              })}
-            </div>
-          </div>
-        </div>
-      )}
-
-      {playerPaymentPrompt && (
-        <div className="absolute bottom-8 left-1/2 transform -translate-x-1/2 bg-red-950 border-2 border-red-500 text-white px-6 py-3 rounded-2xl shadow-2xl z-50 flex items-center gap-4 animate-bounce">
-          <div>
-            <h4 className="font-bold text-sm text-red-400">Payment Due: {playerPaymentPrompt.reason}</h4>
-            <p className="text-xs text-stone-300">Amount Due: <span className="font-bold text-amber-400">{playerPaymentPrompt.amount} points</span>. Open your Bank to pay.</p>
-          </div>
-          <button onClick={() => setIsMyBankOpen(true)} className="bg-amber-600 hover:bg-amber-500 text-white text-xs font-bold px-4 py-2 rounded-xl shadow">Open My Bank</button>
-        </div>
-      )}
-
-      {selectedActionCard && (
-        <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50">
-          <div className="bg-stone-900 border-2 border-amber-500 rounded-2xl p-6 max-w-sm text-center shadow-2xl">
-            <h3 className="text-amber-400 font-serif font-bold text-lg mb-2">Play Action Card</h3>
-            <p className="text-stone-300 text-xs mb-6">How would you like to play <span className="text-white font-bold">{selectedActionCard.name}</span>?</p>
-            <div className="flex flex-col gap-3">
-              <button onClick={() => resolveActionChoice('action')} className="bg-purple-700 hover:bg-purple-600 text-white font-bold py-2.5 px-4 rounded-xl shadow transition">Play as Spell Effect</button>
-              <button onClick={() => resolveActionChoice('bank')} className="bg-amber-600 hover:bg-amber-500 text-white font-bold py-2.5 px-4 rounded-xl shadow transition">Send to Bank ({selectedActionCard.value} Pts)</button>
-              <button onClick={() => setSelectedActionCard(null)} className="bg-stone-700 hover:bg-stone-600 text-stone-300 text-xs py-2 rounded-lg mt-2">Cancel</button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* MY BANK VAULT MODAL */}
-      {isMyBankOpen && (
-        <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-50 p-6">
-          <div className="bg-stone-900 border-2 border-amber-500 rounded-2xl p-6 max-w-3xl w-full shadow-2xl flex flex-col max-h-[85vh]">
-            <div className="flex justify-between items-center mb-4 border-b border-stone-800 pb-3">
-              <div>
-                <h3 className="text-amber-400 font-serif font-bold text-lg">My Bank</h3>
-                <p className="text-stone-400 text-xs">Total Bank Points: <span className="text-white font-bold">{myBankTotal} points</span></p>
-                {playerPaymentPrompt && (<span className="block mt-1 text-red-400 font-bold text-xs animate-pulse">Click a card to surrender it as payment. (Owed: {playerPaymentPrompt.amount} points)</span>)}
-              </div>
-              <button onClick={() => setIsMyBankOpen(false)} className="bg-stone-800 hover:bg-stone-700 text-white px-3 py-1 rounded-lg text-xs font-bold">Close</button>
-            </div>
-
-            <div className="flex-1 overflow-y-auto space-y-4 p-2">
-              <div>
-                <h4 className="text-xs uppercase font-bold tracking-widest text-amber-500 mb-2">My Bank Cards</h4>
-                <div className="grid grid-cols-4 gap-4">
-                  {myBank.map((card: any) => (
-                    <div key={card.runtimeId} className={`flex flex-col items-center ${playerPaymentPrompt ? 'cursor-pointer hover:scale-105 transition' : ''}`} onClick={() => { if (playerPaymentPrompt) handlePlayerPayToOpponent(card, 'bank'); }}>
-                      <div className={playerPaymentPrompt ? 'pointer-events-none' : ''}><PlayingCard name={card.name} type={card.type} value={card.value} effect={card.effect} isBank={true} /></div>
-                    </div>
-                  ))}
-                  {myBank.length === 0 && <span className="text-stone-500 italic text-xs col-span-4">Your bank is empty</span>}
-                </div>
-              </div>
-
-              <div className="border-t border-stone-800 pt-4">
-                <h4 className="text-xs uppercase font-bold tracking-widest text-emerald-400 mb-2">My Items</h4>
-                <div className="grid grid-cols-4 gap-4">
-                  {myProperties.map((card: any) => (
-                    <div key={card.runtimeId} className={`flex flex-col items-center ${playerPaymentPrompt ? 'cursor-pointer hover:scale-105 transition' : ''}`} onClick={() => { if (playerPaymentPrompt && getCardColor(card) !== harryProtectedColor) handlePlayerPayToOpponent(card, 'property'); }}>
-                      <div className={playerPaymentPrompt ? 'pointer-events-none' : ''}>
-                        <PlayingCard name={card.name} type={card.type} colorSet={card.colorSet} value={card.value} rentValues={card.rentValues} activeWildColor={wildCardColors[card.runtimeId]} isRotated={wildCardRotations[card.runtimeId]} onFlip={(e: any) => {
-                            if (!playerPaymentPrompt) {
-                               if (e) e.stopPropagation();
-                               if (card.colorSet?.includes("/")) toggleWildcardColor(card);
-                               else setTableWildcardEditModal(card);
-                            }
-                          }}
-                        />
-                      </div>
-                    </div>
-                  ))}
-                  {myProperties.length === 0 && <span className="text-stone-500 italic text-xs col-span-4">No items played</span>}
-                </div>
-              </div>
-            </div>
           </div>
         </div>
       )}
