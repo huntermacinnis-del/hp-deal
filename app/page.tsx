@@ -1611,9 +1611,7 @@ function PlayingCard({
 }: { 
   name: string; type: string; colorSet?: string; value?: number; rentValues?: number[]; effect?: string; activeWildColor?: string; isRotated?: boolean; onFlip?: (e?: React.MouseEvent) => void; isBank?: boolean; inHand?: boolean;
 }) {
-  const isBack = type === "back";
-
-  if (isBack) {
+  if (type === "back") {
     return (
       <div className="w-28 h-40 rounded-xl shadow-2xl bg-stone-950 border-2 border-amber-600/60 flex flex-col items-center justify-center p-2 transform transition hover:-translate-y-2 cursor-pointer">
         <div className="w-full h-full border border-dashed border-amber-500/40 rounded-lg flex flex-col items-center justify-center text-center bg-stone-900/50">
@@ -1683,141 +1681,6 @@ function PlayingCard({
     );
   }
 
-  if (type === "property" || type === "wildcard") {
-    const set = colorSet || "Black";
-    let topColorName = set;
-    let bottomColorName = "";
-
-    if (set.includes("/")) {
-      const parts = set.split("/");
-      topColorName = parts[0];
-      bottomColorName = parts[1];
-    }
-
-    if (bottomColorName) {
-      const activeColor = activeWildColor || topColorName;
-      const isBottomActive = activeColor === bottomColorName;
-
-      const topClass = getPropertyColorClass(topColorName);
-      const bottomClass = getPropertyColorClass(bottomColorName);
-
-      const getSetRentValues = (col: string) => {
-        if (col.includes("Brown") || col.includes("Dark Blue")) return [1, 2];
-        if (col.includes("Black")) return [1, 2, 3, 4];
-        return [1, 3, 5];
-      };
-
-      const topRents = getSetRentValues(topColorName);
-      const bottomRents = getSetRentValues(bottomColorName);
-
-      return (
-        <div className="w-28 h-40 rounded-xl shadow-xl border border-stone-400 flex flex-col overflow-hidden bg-stone-50 text-stone-900 relative group transform transition hover:-translate-y-2 cursor-pointer">
-          <div className={`transition-transform duration-500 flex flex-col w-full h-full justify-between ${isBottomActive ? 'rotate-180' : 'rotate-0'}`}>
-            <div className={`h-8 ${topClass} w-full flex items-center ${value ? 'justify-end pr-1' : 'justify-center'} px-1 text-center shrink-0 relative`} onClick={(e) => { if(onFlip) onFlip(e); }}>
-              {value !== undefined && value > 0 && <span className="absolute left-1 top-1.5 w-5 h-5 bg-stone-900 text-amber-400 font-bold text-[10px] rounded-full flex items-center justify-center shadow border border-amber-500/50 z-10">{value}</span>}
-              <span className={`text-[9px] font-black uppercase tracking-widest text-center ${value ? 'w-[75%]' : 'w-full'}`}>WILD</span>
-            </div>
-
-            <div className="flex-1 flex items-stretch relative text-[7.5px] overflow-hidden">
-              <div className="w-1/2 flex flex-col justify-around p-1 border-r border-stone-300">
-                {topRents.map((rent, idx) => {
-                  const count = idx + 1;
-                  return (
-                    <div key={idx} className="flex justify-between items-center px-1 font-semibold">
-                      <div className="relative w-5 h-5 flex items-center justify-center shrink-0">
-                        {count === 1 && <div className={`w-4 h-3 rounded-[2px] border border-stone-800 shadow-sm ${topClass} flex items-center justify-center text-[6px] font-bold text-white`}>1</div>}
-                        {count === 2 && <div className="relative w-5 h-4"><div className={`absolute left-0 top-0 w-4 h-3 rounded-[2px] border border-stone-800 shadow-sm ${topClass} transform -rotate-6`}></div><div className={`absolute left-1 top-0.5 w-4 h-3 rounded-[2px] border border-stone-800 shadow-sm ${topClass} flex items-center justify-center text-[6px] font-bold text-white z-10`}>2</div></div>}
-                        {count === 3 && <div className="relative w-5 h-4"><div className={`absolute left-0 top-1 w-3.5 h-2.5 rounded-[2px] border border-stone-800 ${topClass} transform -rotate-12`}></div><div className={`absolute left-1 top-0.5 w-3.5 h-2.5 rounded-[2px] border border-stone-800 ${topClass} transform -rotate-6`}></div><div className={`absolute left-2 top-0 w-3.5 h-2.5 rounded-[2px] border border-stone-800 ${topClass} flex items-center justify-center text-[5.5px] font-bold text-white z-10`}>3</div></div>}
-                        {count === 4 && <div className="relative w-5 h-4"><div className={`absolute left-0 top-1.5 w-3 h-2.5 rounded-[2px] border border-stone-800 ${topClass} transform -rotate-12`}></div><div className={`absolute left-0.5 top-1 w-3 h-2.5 rounded-[2px] border border-stone-800 ${topClass} transform -rotate-6`}></div><div className={`absolute left-1 top-0.5 w-3 h-2.5 rounded-[2px] border border-stone-800 ${topClass} transform -rotate-3`}></div><div className={`absolute left-1.5 top-0 w-3 h-2.5 rounded-[2px] border border-stone-800 ${topClass} flex items-center justify-center text-[5px] font-bold text-white z-10`}>4</div></div>}
-                      </div>
-                      <span className="font-bold text-xs">{rent}</span>
-                    </div>
-                  );
-                })}
-              </div>
-              <div className="absolute inset-x-0 top-0 bottom-0 flex items-center justify-center pointer-events-none z-10">
-                <div className="w-2 h-full flex flex-col justify-between items-center py-1"><div className={`w-1.5 flex-1 ${topClass} rounded-full`}></div><div className={`w-1.5 flex-1 ${bottomClass} rounded-full`}></div></div>
-              </div>
-              <div className="w-1/2 flex flex-col justify-around p-1 rotate-180 bg-stone-100/50">
-                {bottomRents.map((rent, idx) => {
-                  const count = idx + 1;
-                  return (
-                    <div key={idx} className="flex justify-between items-center px-1 font-semibold">
-                      <div className="relative w-5 h-5 flex items-center justify-center shrink-0">
-                        {count === 1 && <div className={`w-4 h-3 rounded-[2px] border border-stone-800 shadow-sm ${bottomClass} flex items-center justify-center text-[6px] font-bold text-white`}>1</div>}
-                        {count === 2 && <div className="relative w-5 h-4"><div className={`absolute left-0 top-0 w-4 h-3 rounded-[2px] border border-stone-800 shadow-sm ${bottomClass} transform -rotate-6`}></div><div className={`absolute left-1 top-0.5 w-4 h-3 rounded-[2px] border border-stone-800 shadow-sm ${bottomClass} flex items-center justify-center text-[6px] font-bold text-white z-10`}>2</div></div>}
-                        {count === 3 && <div className="relative w-5 h-4"><div className={`absolute left-0 top-1 w-3.5 h-2.5 rounded-[2px] border border-stone-800 ${bottomClass} transform -rotate-12`}></div><div className={`absolute left-1 top-0.5 w-3.5 h-2.5 rounded-[2px] border border-stone-800 ${bottomClass} transform -rotate-6`}></div><div className={`absolute left-2 top-0 w-3.5 h-2.5 rounded-[2px] border border-stone-800 ${bottomClass} flex items-center justify-center text-[5.5px] font-bold text-white z-10`}>3</div></div>}
-                        {count === 4 && <div className="relative w-5 h-4"><div className={`absolute left-0 top-1.5 w-3 h-2.5 rounded-[2px] border border-stone-800 ${bottomClass} transform -rotate-12`}></div><div className={`absolute left-0.5 top-1 w-3 h-2.5 rounded-[2px] border border-stone-800 ${bottomClass} transform -rotate-6`}></div><div className={`absolute left-1 top-0.5 w-3 h-2.5 rounded-[2px] border border-stone-800 ${bottomClass} transform -rotate-3`}></div><div className={`absolute left-1.5 top-0 w-3 h-2.5 rounded-[2px] border border-stone-800 ${bottomClass} flex items-center justify-center text-[5px] font-bold text-white z-10`}>4</div></div>}
-                      </div>
-                      <span className="font-bold text-xs">{rent}</span>
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-
-            <div className={`h-8 ${bottomClass} w-full flex items-center ${value ? 'justify-end pr-1' : 'justify-center'} px-1 text-center rotate-180 shrink-0 relative`} onClick={(e) => { if(onFlip) onFlip(e); }}>
-              {value !== undefined && value > 0 && <span className="absolute left-1 top-1.5 w-5 h-5 bg-stone-900 text-amber-400 font-bold text-[10px] rounded-full flex items-center justify-center shadow border border-amber-500/50 z-10">{value}</span>}
-              <span className={`text-[9px] font-black uppercase tracking-widest text-center ${value ? 'w-[75%]' : 'w-full'}`}>WILD</span>
-            </div>
-          </div>
-
-          {!inHand && (
-              <div className="absolute inset-0 bg-black/40 hover:bg-black/60 text-white font-bold text-[10px] flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity z-30 backdrop-blur-[1px] pointer-events-none">
-                🔄 Click to Rotate
-              </div>
-          )}
-        </div>
-      );
-    }
-
-    const topClass = getPropertyColorClass(topColorName);
-    const setCounts: { [key: string]: number } = {
-      "Brown": 2, "Dark Blue": 2, "Light Green": 2, "Pink": 3, 
-      "Orange": 3, "Yellow": 3, "Red": 3, "Light Blue": 3, 
-      "Dark Green": 3, "Black": 4
-    };
-    const maxItems = setCounts[topColorName] || 3;
-    const resolvedRentValues = rentValues || (maxItems === 2 ? [1, 2] : maxItems === 4 ? [1, 2, 3, 4] : [1, 3, 5]);
-
-    return (
-      <div className="w-28 h-40 rounded-xl shadow-xl border border-stone-400 flex flex-col overflow-hidden bg-stone-50 text-stone-900 transform transition hover:-translate-y-2 cursor-pointer">
-        <div className="relative">
-          {value !== undefined && value > 0 && <span className="absolute left-1 top-1.5 w-5 h-5 bg-stone-900 text-amber-400 font-bold text-[10px] rounded-full flex items-center justify-center shadow z-10 border border-amber-500/50">{value}</span>}
-          <div className={`h-8 ${topClass} w-full flex items-center ${value ? 'justify-end pr-2' : 'justify-center'} px-1 border-b border-stone-400 shadow-sm relative`}>
-            <span className={`${name.length > 12 ? 'text-[6px] leading-[1.1]' : 'text-[7.5px] leading-tight'} font-bold uppercase tracking-tight break-words line-clamp-2 text-center ${value ? 'w-[75%]' : 'w-full'}`}>{name}</span>
-          </div>
-        </div>
-
-        <div className="flex-1 flex flex-col px-1.5 pt-1 pb-1 justify-between text-[8px] overflow-hidden">
-          <div className="grid grid-cols-2 text-center font-bold text-stone-500 border-b border-stone-200 pb-0.5 shrink-0">
-            <span>ITEMS OWNED</span>
-            <span>POINTS</span>
-          </div>
-          <div className="flex-1 flex flex-col justify-around px-1 min-h-0">
-            {resolvedRentValues.map((rent: number, idx: number) => {
-              const count = idx + 1;
-              return (
-                <div key={idx} className="flex justify-between items-center text-stone-800 font-semibold border-b border-stone-100 last:border-0 py-[1.5px]">
-                  <div className="relative w-5 h-5 flex items-center justify-center shrink-0">
-                    {count === 1 && <div className={`w-4 h-3 rounded-[2px] border border-stone-800 shadow-sm ${topClass} flex items-center justify-center text-[6px] font-bold text-white`}>1</div>}
-                    {count === 2 && <div className="relative w-5 h-4"><div className={`absolute left-0 top-0 w-4 h-3 rounded-[2px] border border-stone-800 shadow-sm ${topClass} transform -rotate-6`}></div><div className={`absolute left-1 top-0.5 w-4 h-3 rounded-[2px] border border-stone-800 shadow-sm ${topClass} flex items-center justify-center text-[6px] font-bold text-white z-10`}>2</div></div>}
-                    {count === 3 && <div className="relative w-5 h-4"><div className={`absolute left-0 top-1 w-3.5 h-2.5 rounded-[2px] border border-stone-800 ${topClass} transform -rotate-12`}></div><div className={`absolute left-1 top-0.5 w-3.5 h-2.5 rounded-[2px] border border-stone-800 ${topClass} transform -rotate-6`}></div><div className={`absolute left-2 top-0 w-3.5 h-2.5 rounded-[2px] border border-stone-800 ${topClass} flex items-center justify-center text-[5.5px] font-bold text-white z-10`}>3</div></div>}
-                    {count === 4 && <div className="relative w-5 h-4"><div className={`absolute left-0 top-1.5 w-3 h-2.5 rounded-[2px] border border-stone-800 ${topClass} transform -rotate-12`}></div><div className={`absolute left-0.5 top-1 w-3 h-2.5 rounded-[2px] border border-stone-800 ${topClass} transform -rotate-6`}></div><div className={`absolute left-1 top-0.5 w-3 h-2.5 rounded-[2px] border border-stone-800 ${topClass} transform -rotate-3`}></div><div className={`absolute left-1.5 top-0 w-3 h-2.5 rounded-[2px] border border-stone-800 ${topClass} flex items-center justify-center text-[5px] font-bold text-white z-10`}>4</div></div>}
-                  </div>
-                  <span className="font-bold text-xs text-stone-900">{rent}</span>
-                </div>
-              );
-            })}
-          </div>
-          <div className="text-center text-[6px] font-bold uppercase tracking-wider text-stone-500 shrink-0 pt-0.5">
-            Complete Set ({maxItems} Items)
-          </div>
-        </div>
-      </div>
-    );
-  }
-
   if (type === "action") {
     let actionBg = "bg-purple-600 text-white";
     let pointBgClass = "bg-stone-900 text-purple-300 border-purple-500";
@@ -1873,24 +1736,137 @@ function PlayingCard({
     );
   }
 
-  let moneyBg = "bg-amber-100 text-stone-900";
-  if (value === 1) moneyBg = "bg-slate-300 text-stone-900";
-  else if (value === 2) moneyBg = "bg-red-600 text-white";
-  else if (value === 3) moneyBg = "bg-sky-300 text-stone-900";
-  else if (value === 4) moneyBg = "bg-emerald-600 text-white";
-  else if (value === 5) moneyBg = "bg-amber-500 text-stone-950";
-  else if (value === 10) moneyBg = "bg-yellow-100 text-stone-900";
+  // Property / Wildcard fallback return
+  const set = colorSet || "Black";
+  let topColorName = set;
+  let bottomColorName = "";
+
+  if (set.includes("/")) {
+    const parts = set.split("/");
+    topColorName = parts[0];
+    bottomColorName = parts[1];
+  }
+
+  if (bottomColorName) {
+    const activeColor = activeWildColor || topColorName;
+    const isBottomActive = activeColor === bottomColorName;
+
+    const topClass = getPropertyColorClass(topColorName);
+    const bottomClass = getPropertyColorClass(bottomColorName);
+
+    const getSetRentValues = (col: string) => {
+      if (col.includes("Brown") || col.includes("Dark Blue")) return [1, 2];
+      if (col.includes("Black")) return [1, 2, 3, 4];
+      return [1, 3, 5];
+    };
+
+    const topRents = getSetRentValues(topColorName);
+    const bottomRents = getSetRentValues(bottomColorName);
+
+    return (
+      <div className="w-28 h-40 rounded-xl shadow-xl border border-stone-400 flex flex-col overflow-hidden bg-stone-50 text-stone-900 relative group transform transition hover:-translate-y-2 cursor-pointer">
+        <div className={`transition-transform duration-500 flex flex-col w-full h-full justify-between ${isBottomActive ? 'rotate-180' : 'rotate-0'}`}>
+          <div className={`h-8 ${topClass} w-full flex items-center ${value ? 'justify-end pr-1' : 'justify-center'} px-1 text-center shrink-0 relative`} onClick={(e) => { if(onFlip) onFlip(e); }}>
+            {value !== undefined && value > 0 && <span className="absolute left-1 top-1.5 w-5 h-5 bg-stone-900 text-amber-400 font-bold text-[10px] rounded-full flex items-center justify-center shadow border border-amber-500/50 z-10">{value}</span>}
+            <span className={`text-[9px] font-black uppercase tracking-widest text-center ${value ? 'w-[75%]' : 'w-full'}`}>WILD</span>
+          </div>
+
+          <div className="flex-1 flex items-stretch relative text-[7.5px] overflow-hidden">
+            <div className="w-1/2 flex flex-col justify-around p-1 border-r border-stone-300">
+              {topRents.map((rent, idx) => {
+                const count = idx + 1;
+                return (
+                  <div key={idx} className="flex justify-between items-center px-1 font-semibold">
+                    <div className="relative w-5 h-5 flex items-center justify-center shrink-0">
+                      {count === 1 && <div className={`w-4 h-3 rounded-[2px] border border-stone-800 shadow-sm ${topClass} flex items-center justify-center text-[6px] font-bold text-white`}>1</div>}
+                      {count === 2 && <div className="relative w-5 h-4"><div className={`absolute left-0 top-0 w-4 h-3 rounded-[2px] border border-stone-800 shadow-sm ${topClass} transform -rotate-6`}></div><div className={`absolute left-1 top-0.5 w-4 h-3 rounded-[2px] border border-stone-800 shadow-sm ${topClass} flex items-center justify-center text-[6px] font-bold text-white z-10`}>2</div></div>}
+                      {count === 3 && <div className="relative w-5 h-4"><div className={`absolute left-0 top-1 w-3.5 h-2.5 rounded-[2px] border border-stone-800 ${topClass} transform -rotate-12`}></div><div className={`absolute left-1 top-0.5 w-3.5 h-2.5 rounded-[2px] border border-stone-800 ${topClass} transform -rotate-6`}></div><div className={`absolute left-2 top-0 w-3.5 h-2.5 rounded-[2px] border border-stone-800 ${topClass} flex items-center justify-center text-[5.5px] font-bold text-white z-10`}>3</div></div>}
+                      {count === 4 && <div className="relative w-5 h-4"><div className={`absolute left-0 top-1.5 w-3 h-2.5 rounded-[2px] border border-stone-800 ${topClass} transform -rotate-12`}></div><div className={`absolute left-0.5 top-1 w-3 h-2.5 rounded-[2px] border border-stone-800 ${topClass} transform -rotate-6`}></div><div className={`absolute left-1 top-0.5 w-3 h-2.5 rounded-[2px] border border-stone-800 ${topClass} transform -rotate-3`}></div><div className={`absolute left-1.5 top-0 w-3 h-2.5 rounded-[2px] border border-stone-800 ${topClass} flex items-center justify-center text-[5px] font-bold text-white z-10`}>4</div></div>}
+                    </div>
+                    <span className="font-bold text-xs">{rent}</span>
+                  </div>
+                );
+              })}
+            </div>
+            <div className="absolute inset-x-0 top-0 bottom-0 flex items-center justify-center pointer-events-none z-10">
+              <div className="w-2 h-full flex flex-col justify-between items-center py-1"><div className={`w-1.5 flex-1 ${topClass} rounded-full`}></div><div className={`w-1.5 flex-1 ${bottomClass} rounded-full`}></div></div>
+            </div>
+            <div className="w-1/2 flex flex-col justify-around p-1 rotate-180 bg-stone-100/50">
+              {bottomRents.map((rent, idx) => {
+                const count = idx + 1;
+                return (
+                  <div key={idx} className="flex justify-between items-center px-1 font-semibold">
+                    <div className="relative w-5 h-5 flex items-center justify-center shrink-0">
+                      {count === 1 && <div className={`w-4 h-3 rounded-[2px] border border-stone-800 shadow-sm ${bottomClass} flex items-center justify-center text-[6px] font-bold text-white`}>1</div>}
+                      {count === 2 && <div className="relative w-5 h-4"><div className={`absolute left-0 top-0 w-4 h-3 rounded-[2px] border border-stone-800 shadow-sm ${bottomClass} transform -rotate-6`}></div><div className={`absolute left-1 top-0.5 w-4 h-3 rounded-[2px] border border-stone-800 shadow-sm ${bottomClass} flex items-center justify-center text-[6px] font-bold text-white z-10`}>2</div></div>}
+                      {count === 3 && <div className="relative w-5 h-4"><div className={`absolute left-0 top-1 w-3.5 h-2.5 rounded-[2px] border border-stone-800 ${bottomClass} transform -rotate-12`}></div><div className={`absolute left-1 top-0.5 w-3.5 h-2.5 rounded-[2px] border border-stone-800 ${bottomClass} transform -rotate-6`}></div><div className={`absolute left-2 top-0 w-3.5 h-2.5 rounded-[2px] border border-stone-800 ${bottomClass} flex items-center justify-center text-[5.5px] font-bold text-white z-10`}>3</div></div>}
+                      {count === 4 && <div className="relative w-5 h-4"><div className={`absolute left-0 top-1.5 w-3 h-2.5 rounded-[2px] border border-stone-800 ${bottomClass} transform -rotate-12`}></div><div className={`absolute left-0.5 top-1 w-3 h-2.5 rounded-[2px] border border-stone-800 ${bottomClass} transform -rotate-6`}></div><div className={`absolute left-1 top-0.5 w-3 h-2.5 rounded-[2px] border border-stone-800 ${bottomClass} transform -rotate-3`}></div><div className={`absolute left-1.5 top-0 w-3 h-2.5 rounded-[2px] border border-stone-800 ${bottomClass} flex items-center justify-center text-[5px] font-bold text-white z-10`}>4</div></div>}
+                    </div>
+                    <span className="font-bold text-xs">{rent}</span>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+
+          <div className={`h-8 ${bottomClass} w-full flex items-center ${value ? 'justify-end pr-1' : 'justify-center'} px-1 text-center rotate-180 shrink-0 relative`} onClick={(e) => { if(onFlip) onFlip(e); }}>
+            {value !== undefined && value > 0 && <span className="absolute left-1 top-1.5 w-5 h-5 bg-stone-900 text-amber-400 font-bold text-[10px] rounded-full flex items-center justify-center shadow border border-amber-500/50 z-10">{value}</span>}
+            <span className={`text-[9px] font-black uppercase tracking-widest text-center ${value ? 'w-[75%]' : 'w-full'}`}>WILD</span>
+          </div>
+        </div>
+
+        {!inHand && (
+            <div className="absolute inset-0 bg-black/40 hover:bg-black/60 text-white font-bold text-[10px] flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity z-30 backdrop-blur-[1px] pointer-events-none">
+              🔄 Click to Rotate
+            </div>
+        )}
+      </div>
+    );
+  }
+
+  const topClass = getPropertyColorClass(topColorName);
+  const setCounts: { [key: string]: number } = {
+    "Brown": 2, "Dark Blue": 2, "Light Green": 2, "Pink": 3, 
+    "Orange": 3, "Yellow": 3, "Red": 3, "Light Blue": 3, 
+    "Dark Green": 3, "Black": 4
+  };
+  const maxItems = setCounts[topColorName] || 3;
+  const resolvedRentValues = rentValues || (maxItems === 2 ? [1, 2] : maxItems === 4 ? [1, 2, 3, 4] : [1, 3, 5]);
 
   return (
-    <div className={`w-28 h-40 rounded-xl shadow-xl border-2 border-stone-800 flex flex-col justify-between p-3 overflow-hidden transform transition hover:-translate-y-2 cursor-pointer ${moneyBg} relative`}>
-      <div className="flex justify-between items-start">
-        {value !== undefined && <span className="w-6 h-6 bg-stone-900 text-amber-400 font-black text-xs rounded-full flex items-center justify-center shadow border border-amber-500">{value}</span>}
-        <span className="text-[7px] uppercase tracking-widest font-bold opacity-70">POINT CARD</span>
+    <div className="w-28 h-40 rounded-xl shadow-xl border border-stone-400 flex flex-col overflow-hidden bg-stone-50 text-stone-900 transform transition hover:-translate-y-2 cursor-pointer">
+      <div className="relative">
+        {value !== undefined && value > 0 && <span className="absolute left-1 top-1.5 w-5 h-5 bg-stone-900 text-amber-400 font-bold text-[10px] rounded-full flex items-center justify-center shadow z-10 border border-amber-500/50">{value}</span>}
+        <div className={`h-8 ${topClass} w-full flex items-center ${value ? 'justify-end pr-2' : 'justify-center'} px-1 border-b border-stone-400 shadow-sm relative`}>
+          <span className={`${name.length > 12 ? 'text-[6px] leading-[1.1]' : 'text-[7.5px] leading-tight'} font-bold uppercase tracking-tight break-words line-clamp-2 text-center ${value ? 'w-[75%]' : 'w-full'}`}>{name}</span>
+        </div>
       </div>
-      <div className="text-center my-auto">
-        <span className="text-7xl font-black font-serif tracking-tighter drop-shadow">{value}</span>
+
+      <div className="flex-1 flex flex-col px-1.5 pt-1 pb-1 justify-between text-[8px] overflow-hidden">
+        <div className="grid grid-cols-2 text-center font-bold text-stone-500 border-b border-stone-200 pb-0.5 shrink-0">
+          <span>ITEMS OWNED</span>
+          <span>POINTS</span>
+        </div>
+        <div className="flex-1 flex flex-col justify-around px-1 min-h-0">
+          {resolvedRentValues.map((rent: number, idx: number) => {
+            const count = idx + 1;
+            return (
+              <div key={idx} className="flex justify-between items-center text-stone-800 font-semibold border-b border-stone-100 last:border-0 py-[1.5px]">
+                <div className="relative w-5 h-5 flex items-center justify-center shrink-0">
+                  {count === 1 && <div className={`w-4 h-3 rounded-[2px] border border-stone-800 shadow-sm ${topClass} flex items-center justify-center text-[6px] font-bold text-white`}>1</div>}
+                  {count === 2 && <div className="relative w-5 h-4"><div className={`absolute left-0 top-0 w-4 h-3 rounded-[2px] border border-stone-800 shadow-sm ${topClass} transform -rotate-6`}></div><div className={`absolute left-1 top-0.5 w-4 h-3 rounded-[2px] border border-stone-800 shadow-sm ${topClass} flex items-center justify-center text-[6px] font-bold text-white z-10`}>2</div></div>}
+                  {count === 3 && <div className="relative w-5 h-4"><div className={`absolute left-0 top-1 w-3.5 h-2.5 rounded-[2px] border border-stone-800 ${topClass} transform -rotate-12`}></div><div className={`absolute left-1 top-0.5 w-3.5 h-2.5 rounded-[2px] border border-stone-800 ${topClass} transform -rotate-6`}></div><div className={`absolute left-2 top-0 w-3.5 h-2.5 rounded-[2px] border border-stone-800 ${topClass} flex items-center justify-center text-[5.5px] font-bold text-white z-10`}>3</div></div>}
+                  {count === 4 && <div className="relative w-5 h-4"><div className={`absolute left-0 top-1.5 w-3 h-2.5 rounded-[2px] border border-stone-800 ${topClass} transform -rotate-12`}></div><div className={`absolute left-0.5 top-1 w-3 h-2.5 rounded-[2px] border border-stone-800 ${topClass} transform -rotate-6`}></div><div className={`absolute left-1 top-0.5 w-3 h-2.5 rounded-[2px] border border-stone-800 ${topClass} transform -rotate-3`}></div><div className={`absolute left-1.5 top-0 w-3 h-2.5 rounded-[2px] border border-stone-800 ${topClass} flex items-center justify-center text-[5px] font-bold text-white z-10`}>4</div></div>}
+                </div>
+                <span className="font-bold text-xs text-stone-900">{rent}</span>
+              </div>
+            );
+          })}
+        </div>
+        <div className="text-center text-[6px] font-bold uppercase tracking-wider text-stone-500 shrink-0 pt-0.5">
+          Complete Set ({maxItems} Items)
+        </div>
       </div>
-      <div className="h-6"></div>
     </div>
   );
 }
