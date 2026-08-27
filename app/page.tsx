@@ -176,7 +176,6 @@ export default function GameBoard() {
   const opponentHand = myRole === 'player1' ? p2Hand : p1Hand;
   const opponentBank = myRole === 'player1' ? p2Bank : p1Bank;
   const opponentProperties = myRole === 'player1' ? p2Properties : p1Properties;
-  const opponentCharacter = myRole === 'player1' ? p2Character : p1Character;
   const isOpponentFrozen = myRole === 'player1' ? p2Frozen : p1Frozen;
 
   const myAvatar = myRole === 'player1' ? '/hunter.jpg' : '/jess.jpg';
