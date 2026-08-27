@@ -63,7 +63,6 @@ export default function GameBoard() {
   const [selectedActionCard, setSelectedActionCard] = useState<any | null>(null);
   const [isMyBankOpen, setIsMyBankOpen] = useState<boolean>(false); 
   const [isPaymentVaultOpen, setIsPaymentVaultOpen] = useState<boolean>(false); 
-  const [paymentPrompt, setPaymentPrompt] = useState<{ amount: number; reason: string } | null>(null);
   const [playerPaymentPrompt, setPlayerPaymentPrompt] = useState<{ amount: number; reason: string } | null>(null);
   const [rentSelectionModal, setRentSelectionModal] = useState<{ validColors: string[]; actionCard: any } | null>(null);
   
