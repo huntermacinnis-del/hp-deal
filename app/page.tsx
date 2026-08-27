@@ -4,6 +4,45 @@ import { supabase } from './supabase';
 
 const ROOM_ID = 'main-room';
 
+const DEFAULT_CHARACTERS = [
+  { id: 'c1', name: 'Harry Potter', type: 'character', effect: 'Protected from one targeted spell or property color per turn.' },
+  { id: 'c2', name: 'Hermione Granger', type: 'character', effect: 'Gain 4 actions per turn instead of 3.' },
+  { id: 'c3', name: 'Draco Malfoy', type: 'character', effect: 'Can steal completed sets or items.' },
+  { id: 'c4', name: 'Cedric Diggory', type: 'character', effect: 'May draw turn cards from the discard pile.' },
+  { id: 'c5', name: 'Luna Lovegood', type: 'character', effect: 'Draw 3 cards at the start of your turn.' }
+];
+
+const DEFAULT_PLAYABLE = [
+  { id: 'p1', name: 'Privet Drive', type: 'property', colorSet: 'Brown', value: 1, rentValues: [1, 2] },
+  { id: 'p2', name: 'The Burrow', type: 'property', colorSet: 'Brown', value: 1, rentValues: [1, 2] },
+  { id: 'p3', name: 'Gryffindor Common Room', type: 'property', colorSet: 'Dark Blue', value: 4, rentValues: [1, 2] },
+  { id: 'p4', name: 'Slytherin Dungeon', type: 'property', colorSet: 'Dark Blue', value: 4, rentValues: [1, 2] },
+  { id: 'p5', name: 'Hogsmeade Village', type: 'property', colorSet: 'Light Green', value: 2, rentValues: [1, 3, 5] },
+  { id: 'p6', name: 'Diagon Alley', type: 'property', colorSet: 'Light Green', value: 2, rentValues: [1, 3, 5] },
+  { id: 'p7', name: 'Gringotts Bank', type: 'property', colorSet: 'Light Green', value: 2, rentValues: [1, 3, 5] },
+  { id: 'p8', name: 'Honeydukes', type: 'property', colorSet: 'Pink', value: 2, rentValues: [1, 3, 5] },
+  { id: 'p9', name: 'Zonko\'s Joke Shop', type: 'property', colorSet: 'Pink', value: 2, rentValues: [1, 3, 5] },
+  { id: 'p10', name: 'Three Broomsticks', type: 'property', colorSet: 'Pink', value: 2, rentValues: [1, 3, 5] },
+  { id: 'm1', name: '1 Galleon', type: 'money', value: 1 },
+  { id: 'm2', name: '1 Galleon', type: 'money', value: 1 },
+  { id: 'm3', name: '2 Galleons', type: 'money', value: 2 },
+  { id: 'm4', name: '2 Galleons', type: 'money', value: 2 },
+  { id: 'm5', name: '3 Galleons', type: 'money', value: 3 },
+  { id: 'm6', name: '4 Galleons', type: 'money', value: 4 },
+  { id: 'm7', name: '5 Galleons', type: 'money', value: 5 },
+  { id: 'a1', name: 'Accio Brown', type: 'action', colorSet: 'Brown', value: 1 },
+  { id: 'a2', name: 'Geminio', type: 'action', value: 1 },
+  { id: 'a3', name: 'Alohomora', type: 'action', value: 1 },
+  { id: 'a4', name: 'Stupefy', type: 'action', value: 2 },
+  { id: 'a5', name: 'Reparo', type: 'action', value: 1 },
+  { id: 'a6', name: 'Levicorpus', type: 'action', value: 3 },
+  { id: 'a7', name: 'Obliviate', type: 'action', value: 3 },
+  { id: 'a8', name: 'Wingardium Leviosa', type: 'action', value: 1 },
+  { id: 'a9', name: 'Petrificus Totalus', type: 'action', value: 3 },
+  { id: 'a10', name: 'Protego', type: 'action', value: 2 },
+  { id: 'a11', name: 'Confundo', type: 'action', value: 1 }
+];
+
 function getAccurateCardEffect(name: string, originalEffect?: string) {
   const n = (name || "").toLowerCase();
   if (n.includes("accio")) return "Collect points from players for this color set.";
@@ -63,7 +102,6 @@ export default function GameBoard() {
   const [selectedActionCard, setSelectedActionCard] = useState<any | null>(null);
   const [isMyBankOpen, setIsMyBankOpen] = useState<boolean>(false); 
   const [isPaymentVaultOpen, setIsPaymentVaultOpen] = useState<boolean>(false); 
-  const [paymentPrompt, setPaymentPrompt] = useState<{ amount: number; reason: string } | null>(null);
   const [playerPaymentPrompt, setPlayerPaymentPrompt] = useState<{ amount: number; reason: string } | null>(null);
   const [rentSelectionModal, setRentSelectionModal] = useState<{ validColors: string[]; actionCard: any } | null>(null);
   
@@ -87,7 +125,7 @@ export default function GameBoard() {
   const [isDiscardingExcess, setIsDiscardingExcess] = useState<boolean>(false);
   const [spellAnimation, setSpellAnimation] = useState<{name: string, player: string} | null>(null);
 
-  // Derived state helpers for typing
+  // Derived state helpers
   const isMyTurn = activeTurn === myRole;
   const myName = myRole === 'player1' ? "Hunter" : "Jess";
   const opponentName = myRole === 'player1' ? "Jess" : "Hunter";
@@ -103,9 +141,8 @@ export default function GameBoard() {
   const opponentProperties = myRole === 'player1' ? p2Properties : p1Properties;
   const opponentCharacter = myRole === 'player1' ? p2Character : p1Character;
   const isOpponentFrozen = myRole === 'player1' ? p2Frozen : p1Frozen;
-  const frozenCharacters = [isMyCharacterFrozen ? myCharacter : null, isOpponentFrozen ? opponentCharacter : null].filter(Boolean);
 
-  // Bulletproof Wrapper Setters for TypeScript
+  // Bulletproof Wrapper Setters
   const setMyHand = (updater: any) => {
     const val = typeof updater === 'function' ? updater(myHand) : updater;
     if (myRole === 'player1') setP1Hand(val);
@@ -131,11 +168,6 @@ export default function GameBoard() {
     if (myRole === 'player1') setP2Bank(val);
     else setP1Bank(val);
   };
-  const setFrozenCharacters = (updater: any) => {
-    const val = typeof updater === 'function' ? updater(isMyCharacterFrozen) : updater;
-    if (myRole === 'player1') setP1Frozen(!!val);
-    else setP2Frozen(!!val);
-  };
   const toggleWildcardColor = (card: any) => {
     const current = getCardColor(card);
     const colors = card.colorSet ? card.colorSet.split("/") : [];
@@ -144,21 +176,32 @@ export default function GameBoard() {
     setWildCardColors(prev => ({ ...prev, [card.runtimeId]: nextColor }));
   };
 
-  // Load Initial Deck
+  // Load Deck & Auto-Initialize Room
   useEffect(() => {
-    async function loadDeck() {
-      const { data } = await supabase.from('deck').select('*');
-      if (data) {
-        const normalizedData = data.map((card: any, idx: number) => ({
-          ...card,
-          runtimeId: `${card.id}-${idx}-${Math.random().toString(36).substring(2, 9)}`,
-          effect: getAccurateCardEffect(card.name, card.effect)
-        }));
-        setAllCharacters(normalizedData.filter((card: any) => card.type === 'character'));
-        setAllPlayableCards(normalizedData.filter((card: any) => card.type !== 'character'));
+    async function initGame() {
+      const { data: deckData } = await supabase.from('deck').select('*');
+      let rawDeck = deckData && deckData.length > 0 ? deckData : [...DEFAULT_CHARACTERS, ...DEFAULT_PLAYABLE];
+      
+      const normalizedData = rawDeck.map((card: any, idx: number) => ({
+        ...card,
+        runtimeId: `${card.id}-${idx}-${Math.random().toString(36).substring(2, 9)}`,
+        effect: getAccurateCardEffect(card.name, card.effect)
+      }));
+      setAllCharacters(normalizedData.filter((card: any) => card.type === 'character'));
+      setAllPlayableCards(normalizedData.filter((card: any) => card.type !== 'character'));
+
+      // Ensure room exists in Supabase so updates never fail
+      const { data: roomData } = await supabase.from('game_rooms').select('*').eq('id', ROOM_ID).single();
+      if (!roomData) {
+        await supabase.from('game_rooms').insert([{
+          id: ROOM_ID,
+          player1_state: { hand: [], bank: [], properties: [], character: null, isFrozen: false },
+          player2_state: { hand: [], bank: [], properties: [], character: null, isFrozen: false },
+          board_state: { drawPile: [], discardPile: [], activeTurn: 'player1', turnPhase: 'draw', playsRemaining: 3, isGameStarted: false }
+        }]);
       }
     }
-    loadDeck();
+    initGame();
   }, []);
 
   // Supabase Real-time Sync
@@ -236,13 +279,14 @@ export default function GameBoard() {
   };
 
   const handleHostStartGame = async () => {
-    if (allPlayableCards.length === 0 || allCharacters.length === 0) return;
+    const charsToUse = allCharacters.length > 0 ? allCharacters : DEFAULT_CHARACTERS;
+    const cardsToUse = allPlayableCards.length > 0 ? allPlayableCards : DEFAULT_PLAYABLE;
 
-    const shuffledChars = shuffleArray(allCharacters);
+    const shuffledChars = shuffleArray(charsToUse);
     const p1Char = shuffledChars[0];
     const p2Char = shuffledChars[1] || shuffledChars[0];
 
-    const shuffledDeck = shuffleArray(allPlayableCards);
+    const shuffledDeck = shuffleArray(cardsToUse);
     const p1StartingHand = shuffledDeck.slice(0, 5);
     const p2StartingHand = shuffledDeck.slice(5, 10);
     const remainingDeck = shuffledDeck.slice(10);
