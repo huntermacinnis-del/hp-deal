@@ -282,17 +282,27 @@ export default function GameBoard() {
   };
 
   const handleHostStartGame = async () => {
-    const charsToUse = allCharacters.length > 0 ? allCharacters : DEFAULT_CHARACTERS;
-    const cardsToUse = allPlayableCards.length > 0 ? allPlayableCards : DEFAULT_PLAYABLE;
+    // Force generation of full deck with runtime IDs to ensure draw pile is never empty
+    const normalizedChars = DEFAULT_CHARACTERS.map((card: any, idx: number) => ({
+       ...card,
+       runtimeId: `char-${card.id}-${idx}-${Math.random().toString(36).substring(2, 9)}`,
+       effect: getAccurateCardEffect(card.name, card.effect)
+    }));
+    
+    const normalizedCards = DEFAULT_PLAYABLE.map((card: any, idx: number) => ({
+       ...card,
+       runtimeId: `play-${card.id}-${idx}-${Math.random().toString(36).substring(2, 9)}`,
+       effect: getAccurateCardEffect(card.name, card.effect)
+    }));
 
-    const shuffledChars = shuffleArray(charsToUse);
+    const shuffledChars = shuffleArray(normalizedChars);
     const p1Char = shuffledChars[0];
     const p2Char = shuffledChars[1] || shuffledChars[0];
 
-    const shuffledDeck = shuffleArray(cardsToUse);
+    const shuffledDeck = shuffleArray(normalizedCards);
     const p1StartingHand = shuffledDeck.slice(0, 5);
     const p2StartingHand = shuffledDeck.slice(5, 10);
-    const remainingDeck = shuffledDeck.slice(10);
+    const remainingDeck = shuffledDeck.slice(10); // Fully populates the array for Supabase
 
     const initialP1 = { hand: p1StartingHand, bank: [], properties: [], character: p1Char, isFrozen: false };
     const initialP2 = { hand: p2StartingHand, bank: [], properties: [], character: p2Char, isFrozen: false };
@@ -1029,7 +1039,7 @@ export default function GameBoard() {
                   <img src={isMyTurn ? myAvatar : oppAvatar} alt="Turn Avatar" className="w-full h-full object-cover" onError={(e: any) => e.currentTarget.src = isMyTurn ? myFallbackAvatar : oppFallbackAvatar} />
                 </div>
                 <div>
-                    <h3 className={`font-serif font-black text-sm uppercase tracking-widest ${isMyTurn ? 'text-emerald-400' : 'text-amber-400'}`}>{isMyTurn ? `Your Turn (${myName})` : `${opponentName}&apos;s Turn`}</h3>
+                    <h3 className={`font-serif font-black text-sm uppercase tracking-widest ${isMyTurn ? 'text-emerald-400' : 'text-amber-400'}`}>{isMyTurn ? `Your Turn (${myName})` : `${opponentName}'s Turn`}</h3>
                 </div>
               </div>
           )}
@@ -1068,7 +1078,7 @@ export default function GameBoard() {
                   <div className={`w-6 h-6 rounded-full overflow-hidden border-2 ${!isMyTurn ? 'border-amber-400' : 'border-stone-700'}`}>
                      <img src={oppAvatar} alt="Opponent" className="w-full h-full object-cover" onError={(e: any) => e.currentTarget.src = oppFallbackAvatar} />
                   </div>
-                  <h2 className="text-green-300/50 uppercase tracking-widest text-xs">{opponentName}&apos;s Area</h2>
+                  <h2 className="text-green-300/50 uppercase tracking-widest text-xs">{opponentName}'s Area</h2>
               </div>
             </div>
             
@@ -1279,7 +1289,7 @@ export default function GameBoard() {
                  <div className={`w-6 h-6 rounded-full overflow-hidden border-2 ${isMyTurn ? 'border-amber-400' : 'border-stone-700'}`}>
                     <img src={myAvatar} alt="Me" className="w-full h-full object-cover" onError={(e: any) => e.currentTarget.src = myFallbackAvatar} />
                  </div>
-                 <h2 className="text-green-300/50 uppercase tracking-widest text-xs">{isDiscardingExcess ? "Select Excess Cards to Discard (Max 7)" : `${myName}&apos;s Hand (Click card to play - Drag to rearrange)`}</h2>
+                 <h2 className="text-green-300/50 uppercase tracking-widest text-xs">{isDiscardingExcess ? "Select Excess Cards to Discard (Max 7)" : `${myName}'s Hand (Click card to play - Drag to rearrange)`}</h2>
             </div>
             <div className="flex justify-center gap-3 h-40">
               {myHand.length > 0 ? (
