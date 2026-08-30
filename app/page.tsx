@@ -4,45 +4,6 @@ import { supabase } from './supabase';
 
 const ROOM_ID = 'main-room';
 
-const DEFAULT_CHARACTERS = [
-  { id: 'c1', name: 'Harry Potter', type: 'character', effect: 'Protected from one targeted spell or property color per turn.' },
-  { id: 'c2', name: 'Hermione Granger', type: 'character', effect: 'Gain 4 actions per turn instead of 3.' },
-  { id: 'c3', name: 'Draco Malfoy', type: 'character', effect: 'Can steal completed sets or items.' },
-  { id: 'c4', name: 'Cedric Diggory', type: 'character', effect: 'May draw turn cards from the discard pile.' },
-  { id: 'c5', name: 'Luna Lovegood', type: 'character', effect: 'Draw 3 cards at the start of your turn.' }
-];
-
-const DEFAULT_PLAYABLE = [
-  { id: 'p1', name: 'Privet Drive', type: 'property', colorSet: 'Brown', value: 1, rentValues: [1, 2] },
-  { id: 'p2', name: 'The Burrow', type: 'property', colorSet: 'Brown', value: 1, rentValues: [1, 2] },
-  { id: 'p3', name: 'Gryffindor Common Room', type: 'property', colorSet: 'Dark Blue', value: 4, rentValues: [1, 2] },
-  { id: 'p4', name: 'Slytherin Dungeon', type: 'property', colorSet: 'Dark Blue', value: 4, rentValues: [1, 2] },
-  { id: 'p5', name: 'Hogsmeade Village', type: 'property', colorSet: 'Light Green', value: 2, rentValues: [1, 3, 5] },
-  { id: 'p6', name: 'Diagon Alley', type: 'property', colorSet: 'Light Green', value: 2, rentValues: [1, 3, 5] },
-  { id: 'p7', name: 'Gringotts Bank', type: 'property', colorSet: 'Light Green', value: 2, rentValues: [1, 3, 5] },
-  { id: 'p8', name: 'Honeydukes', type: 'property', colorSet: 'Pink', value: 2, rentValues: [1, 3, 5] },
-  { id: 'p9', name: 'Zonko\'s Joke Shop', type: 'property', colorSet: 'Pink', value: 2, rentValues: [1, 3, 5] },
-  { id: 'p10', name: 'Three Broomsticks', type: 'property', colorSet: 'Pink', value: 2, rentValues: [1, 3, 5] },
-  { id: 'm1', name: '1 Galleon', type: 'money', value: 1 },
-  { id: 'm2', name: '1 Galleon', type: 'money', value: 1 },
-  { id: 'm3', name: '2 Galleons', type: 'money', value: 2 },
-  { id: 'm4', name: '2 Galleons', type: 'money', value: 2 },
-  { id: 'm5', name: '3 Galleons', type: 'money', value: 3 },
-  { id: 'm6', name: '4 Galleons', type: 'money', value: 4 },
-  { id: 'm7', name: '5 Galleons', type: 'money', value: 5 },
-  { id: 'a1', name: 'Accio Brown', type: 'action', colorSet: 'Brown', value: 1 },
-  { id: 'a2', name: 'Geminio', type: 'action', value: 1 },
-  { id: 'a3', name: 'Alohomora', type: 'action', value: 1 },
-  { id: 'a4', name: 'Stupefy', type: 'action', value: 2 },
-  { id: 'a5', name: 'Reparo', type: 'action', value: 1 },
-  { id: 'a6', name: 'Levicorpus', type: 'action', value: 3 },
-  { id: 'a7', name: 'Obliviate', type: 'action', value: 3 },
-  { id: 'a8', name: 'Wingardium Leviosa', type: 'action', value: 1 },
-  { id: 'a9', name: 'Petrificus Totalus', type: 'action', value: 3 },
-  { id: 'a10', name: 'Protego', type: 'action', value: 2 },
-  { id: 'a11', name: 'Confundo', type: 'action', value: 1 }
-];
-
 function getAccurateCardEffect(name: string, originalEffect?: string) {
   const n = (name || "").toLowerCase();
   if (n.includes("accio")) return "Collect points from players for this color set.";
@@ -183,10 +144,14 @@ export default function GameBoard() {
   // Load Deck & Auto-Initialize Room
   useEffect(() => {
     async function initGame() {
-      const { data: deckData } = await supabase.from('deck').select('*');
-      let rawDeck = deckData && deckData.length > 0 ? deckData : [...DEFAULT_CHARACTERS, ...DEFAULT_PLAYABLE];
+      const { data: deckData, error } = await supabase.from('deck').select('*');
       
-      const normalizedData = rawDeck.map((card: any, idx: number) => ({
+      if (error || !deckData || deckData.length === 0) {
+        console.error("CRITICAL ERROR: Failed to load deck from Supabase.", error);
+        return;
+      }
+      
+      const normalizedData = deckData.map((card: any, idx: number) => ({
         ...card,
         runtimeId: `${card.id}-${idx}-${Math.random().toString(36).substring(2, 9)}`,
         effect: getAccurateCardEffect(card.name, card.effect)
@@ -282,14 +247,23 @@ export default function GameBoard() {
   };
 
   const handleHostStartGame = async () => {
-    // Force generation of full deck with runtime IDs to ensure draw pile is never empty
-    const normalizedChars = DEFAULT_CHARACTERS.map((card: any, idx: number) => ({
+    const { data: deckData, error } = await supabase.from('deck').select('*');
+    
+    if (error || !deckData || deckData.length === 0) {
+      alert("Database error: Could not fetch the Harry Potter deck from Supabase. Ensure your 'deck' table is populated.");
+      return; 
+    }
+
+    const characters = deckData.filter((c: any) => c.type === 'character');
+    const playableCards = deckData.filter((c: any) => c.type !== 'character');
+
+    const normalizedChars = characters.map((card: any, idx: number) => ({
        ...card,
        runtimeId: `char-${card.id}-${idx}-${Math.random().toString(36).substring(2, 9)}`,
        effect: getAccurateCardEffect(card.name, card.effect)
     }));
     
-    const normalizedCards = DEFAULT_PLAYABLE.map((card: any, idx: number) => ({
+    const normalizedCards = playableCards.map((card: any, idx: number) => ({
        ...card,
        runtimeId: `play-${card.id}-${idx}-${Math.random().toString(36).substring(2, 9)}`,
        effect: getAccurateCardEffect(card.name, card.effect)
@@ -302,7 +276,7 @@ export default function GameBoard() {
     const shuffledDeck = shuffleArray(normalizedCards);
     const p1StartingHand = shuffledDeck.slice(0, 5);
     const p2StartingHand = shuffledDeck.slice(5, 10);
-    const remainingDeck = shuffledDeck.slice(10); // Fully populates the array for Supabase
+    const remainingDeck = shuffledDeck.slice(10);
 
     const initialP1 = { hand: p1StartingHand, bank: [], properties: [], character: p1Char, isFrozen: false };
     const initialP2 = { hand: p2StartingHand, bank: [], properties: [], character: p2Char, isFrozen: false };
