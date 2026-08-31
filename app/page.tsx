@@ -591,6 +591,7 @@ export default function GameBoard() {
     const actionCard = selectedActionCard;
     setSelectedActionCard(null);
 
+    // CRITICAL FIX: IMMEDIATELY REMOVE CARD FROM HAND AND SYNC LOCALLY & REMOTELY BEFORE MODAL ROUTING
     const newHand = myHand.filter((c: any) => c.runtimeId !== actionCard.runtimeId);
     updateMyHand(newHand);
 
@@ -836,6 +837,9 @@ export default function GameBoard() {
       setPlaysRemaining(newPlays);
       await addLogAndSync(`Added points to Bank.`, { playsRemaining: newPlays }, { hand: newHand, bank: newBank });
     } else if (card.type === 'action') {
+      // IMMEDIATELY REMOVE CARD FROM HAND ON CLICKING TO PLAY ACTION
+      const newHand = myHand.filter((c: any) => c.runtimeId !== card.runtimeId);
+      updateMyHand(newHand);
       setSelectedActionCard(card);
     }
   };
@@ -1085,13 +1089,11 @@ export default function GameBoard() {
               <button onClick={async () => {
                  const card = selectedActionCard;
                  setSelectedActionCard(null);
-                 const newHand = myHand.filter((c:any) => c.runtimeId !== card.runtimeId);
-                 updateMyHand(newHand);
                  const newBank = [...myBank, card];
                  updateMyBank(newBank);
                  const newPlays = playsRemaining - 1;
                  setPlaysRemaining(newPlays);
-                 await addLogAndSync(`Added an action card to Bank.`, { playsRemaining: newPlays }, { hand: newHand, bank: newBank });
+                 await addLogAndSync(`Added an action card to Bank.`, { playsRemaining: newPlays }, { bank: newBank });
               }} className="flex-1 bg-amber-600 hover:bg-amber-500 text-stone-900 font-bold py-3 px-4 rounded-xl shadow border border-amber-400 transition">💰 Bank {selectedActionCard.value} Pts</button>
               <button onClick={() => resolveActionChoice('action')} className="flex-1 bg-purple-600 hover:bg-purple-500 text-white font-bold py-3 px-4 rounded-xl shadow border border-purple-400 transition">🪄 Cast Spell</button>
             </div>
