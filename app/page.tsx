@@ -446,7 +446,7 @@ export default function GameBoard() {
     );
   };
 
-  // STRICT PROTEGO CHECK FOR DEFENSE WINDOW
+  // STRICT PROTEGO CHECK & ZERO-ASSET BYPASS LOGIC
   useEffect(() => {
      if (pendingAttack && pendingAttack.target === myRole) {
          const { actionCard, description, type, amount, reason } = pendingAttack;
@@ -455,8 +455,20 @@ export default function GameBoard() {
          const hasProtegoOnTable = tableActions.some((c: any) => c.name.toLowerCase().includes("protego"));
          const hasProtego = hasProtegoInHand || hasProtegoOnTable;
 
+         const totalAssets = myBank.reduce((sum: number, c: any) => sum + (Number(c.value) || 0), 0) + 
+                             myProperties.filter((c: any) => getCardColor(c) !== harryProtectedColor && c.type !== 'wildcard').reduce((sum: number, c: any) => sum + (Number(c.value) || 1), 0);
+
+         if (type === 'payment' && totalAssets <= 0) {
+             (async () => {
+                 await addLogAndSync(
+                     `${myName} had no assets to pay ${opponentName} for ${reason}. Payment waived.`,
+                     { pendingAttack: null }
+                 );
+             })();
+             return;
+         }
+
          if (!hasProtego) {
-             // AUTO-TAKE HIT IF NO PROTEGO IS AVAILABLE
              (async () => {
                  if (type === 'payment') {
                      setPlayerPaymentPrompt({ amount, reason });
@@ -560,8 +572,6 @@ export default function GameBoard() {
     else newTableActions = newTableActions.filter((c: any) => c.runtimeId !== selectedActionCard.runtimeId);
     
     const newPlays = playsRemaining - 1;
-    setMyHand(newHand);
-    setTableActions(newTableActions);
     setPlaysRemaining(newPlays);
 
     if (choice === 'bank') {
@@ -621,7 +631,6 @@ export default function GameBoard() {
         const drawn = currentDeck.splice(0, actualDraw);
         const finalHand = [...newHand, ...drawn];
         
-        // CORRECTLY DISCARD THE GEMINIO ACTION CARD
         const newDiscard = [actionCard, ...currentDiscard];
         setDiscardPile(newDiscard);
 
@@ -827,7 +836,7 @@ export default function GameBoard() {
       const cardValue = Number(cardToPay.value) || 1;
       const remaining = paymentPrompt.amount - cardValue;
       const remainingAssets = newOppBank.reduce((sum: number, c: any) => sum + (Number(c.value) || 0), 0) + 
-                              newOppProps.filter((c: any) => getCardColor(c) !== harryProtectedColor).reduce((sum: number, c: any) => sum + (Number(c.value) || 1), 0);
+                              newOppProps.filter((c: any) => getCardColor(c) !== harryProtectedColor && c.type !== 'wildcard').reduce((sum: number, c: any) => sum + (Number(c.value) || 1), 0);
 
       if (remaining <= 0 || remainingAssets === 0) {
         setPaymentPrompt(null);
@@ -861,7 +870,7 @@ export default function GameBoard() {
       const cardValue = Number(cardToPay.value) || 1;
       const remaining = playerPaymentPrompt.amount - cardValue;
       const remainingAssets = newMyBank.reduce((sum: number, c: any) => sum + (Number(c.value) || 0), 0) + 
-                              newMyProps.filter((c: any) => getCardColor(c) !== harryProtectedColor).reduce((sum: number, c: any) => sum + (Number(c.value) || 1), 0);
+                              newMyProps.filter((c: any) => getCardColor(c) !== harryProtectedColor && c.type !== 'wildcard').reduce((sum: number, c: any) => sum + (Number(c.value) || 1), 0);
 
       if (remaining <= 0 || remainingAssets === 0) {
         setPlayerPaymentPrompt(null);
@@ -1010,7 +1019,6 @@ export default function GameBoard() {
         .animate-spell-pop { animation: spellPop 1.8s ease-out forwards; }
       `}</style>
 
-      {/* ACTION MODAL */}
       {selectedActionCard && (
         <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/60 backdrop-blur-sm">
           <div className="bg-stone-900 border-2 border-purple-500 p-6 rounded-2xl shadow-2xl flex flex-col items-center max-w-sm text-center">
@@ -1036,7 +1044,6 @@ export default function GameBoard() {
         </div>
       )}
 
-      {/* CONTEXTUAL WILDCARD COLOR PICKER */}
       {wildcardSelectionModal && (
         <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/60 backdrop-blur-sm">
           <div className="bg-stone-900 border-2 border-amber-500 p-6 rounded-2xl shadow-2xl flex flex-col items-center max-w-md text-center">
@@ -1107,7 +1114,6 @@ export default function GameBoard() {
         </div>
       )}
 
-      {/* INTERACTIVE BANK DRAWER MODAL */}
       {isMyBankOpen && (
         <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/60 backdrop-blur-sm">
           <div className="bg-stone-900 border-2 border-amber-500 p-6 rounded-2xl shadow-2xl flex flex-col items-center max-w-4xl text-center max-h-[80vh] overflow-hidden">
@@ -1354,7 +1360,6 @@ export default function GameBoard() {
         </div>
       )}
 
-      {/* DEFENSE WINDOW (NO BOUNCE) */}
       {playerDefenseWindow && (
         <div className="absolute bottom-8 left-1/2 transform -translate-x-1/2 bg-blue-950 border-2 border-blue-400 text-white px-6 py-3 rounded-2xl shadow-2xl z-50 flex items-center gap-6 pointer-events-auto">
           <div>
@@ -1454,9 +1459,16 @@ export default function GameBoard() {
                   )}
               </div>
 
-              <div className="relative w-28 h-40 bg-amber-950/40 border-2 border-amber-800/60 rounded-xl flex flex-col items-center justify-center p-2 shrink-0 animate-play-opponent">
-                  <span className="text-[10px] text-amber-400 uppercase tracking-widest font-bold mb-1">Bank Stack</span>
-                  <div className="text-xl font-serif font-bold text-amber-200">{oppBankTotal} pts</div>
+              {/* HIDDEN OPPONENT BANK STACK (COUNT ONLY, NO VALUES SHOWN) */}
+              <div className="relative w-28 h-40 bg-stone-950 border-2 border-stone-800 rounded-xl flex flex-col items-center justify-between p-3 shadow-2xl shrink-0 animate-play-opponent">
+                  <div className="absolute -top-3 bg-stone-800 text-stone-300 font-black text-[10px] px-2 py-0.5 rounded-full uppercase tracking-wider shadow border border-stone-700">Bank</div>
+                  <div className="flex flex-col items-center justify-center flex-1 w-full text-center">
+                    <span className="text-2xl font-black text-stone-500">🔒</span>
+                    <span className="text-[9px] text-stone-500 mt-1 uppercase">Face Down</span>
+                  </div>
+                  <div className="w-full bg-stone-900 border border-stone-800 rounded-lg py-1 text-center">
+                    <span className="text-[9px] text-stone-400 font-bold uppercase tracking-wider">{opponentBank.length} Cards</span>
+                  </div>
               </div>
             </div>
           </section>
@@ -1698,8 +1710,11 @@ function PlayingCard({
       <div className={`w-28 h-40 rounded-xl shadow-xl border-2 ${houseBorder} flex flex-col overflow-hidden transform transition hover:-translate-y-2 cursor-pointer bg-amber-50/95 text-stone-900`}>
         <div className={`h-6 ${headerBg} flex items-center justify-center px-1 text-[9px] font-bold uppercase tracking-widest`}>Character</div>
         <div className="flex-1 flex flex-col items-center justify-between p-2 text-center">
-          <div className="flex items-center gap-1"><span className="text-base">{houseSymbol}</span><span className="text-[11px] font-serif font-bold leading-tight">{name}</span></div>
-          <div className="bg-white/80 border border-stone-300 rounded p-1 w-full"><p className="text-[8px] text-stone-700 leading-tight italic line-clamp-4">{effect || "Character ability."}</p></div>
+          <div className="w-full flex flex-col items-center justify-center my-auto space-y-1">
+            <span className="text-3xl leading-none">{houseSymbol}</span>
+            <span className="text-xs font-serif font-bold leading-tight uppercase px-1">{name}</span>
+          </div>
+          <div className="bg-white/80 border border-stone-300 rounded p-1 w-full"><p className="text-[8px] text-stone-700 leading-tight italic line-clamp-3">{effect || "Character ability."}</p></div>
         </div>
       </div>
     );
