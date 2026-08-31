@@ -163,7 +163,7 @@ export default function GameBoard() {
     initGame();
   }, []);
 
-  // Supabase Real-time Sync (DO NOT overwrite local hand if we are mid-action update)
+  // Supabase Real-time Sync
   useEffect(() => {
     async function fetchRoom() {
       const { data } = await supabase.from('game_rooms').select('*').eq('id', ROOM_ID).single();
@@ -241,7 +241,7 @@ export default function GameBoard() {
     const { data: deckData, error } = await supabase.from('deck').select('*');
     
     if (error || !deckData || deckData.length === 0) {
-      alert("Database error: Could not fetch the Harry Potter deck from Supabase. Ensure your 'deck' table is populated.");
+      alert("Database error: Could not fetch the Harry Potter deck from Supabase.");
       return; 
     }
 
@@ -568,7 +568,6 @@ export default function GameBoard() {
     const actionCard = selectedActionCard;
     setSelectedActionCard(null);
 
-    // STRICTLY REMOVE FROM HAND & DEDUCT PLAY COUNT LOCALLY FIRST
     const newHand = myHand.filter((c: any) => c.runtimeId !== actionCard.runtimeId);
     setMyHand(newHand);
 
