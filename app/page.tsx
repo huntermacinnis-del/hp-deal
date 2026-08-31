@@ -446,7 +446,7 @@ export default function GameBoard() {
     );
   };
 
-  // STRICT PROTEGO CHECK & ZERO-ASSET BYPASS LOGIC
+  // INSTANT ATTACK RESOLUTION WITH ASYNCHRONOUS PROTEGO REACTION
   useEffect(() => {
      if (pendingAttack && pendingAttack.target === myRole) {
          const { actionCard, description, type, amount, reason } = pendingAttack;
@@ -496,6 +496,7 @@ export default function GameBoard() {
              return;
          }
 
+         // HAS PROTEGO: SHOW NON-BOUNCING WINDOW BUT ALLOW 15S TO REACT AND REVERSE
          setPlayerDefenseWindow({
              attackName: `${opponentName} played ${actionCard.name}!`,
              attackDescription: description,
@@ -571,6 +572,9 @@ export default function GameBoard() {
     if (cardInHand) newHand = newHand.filter((c: any) => c.runtimeId !== selectedActionCard.runtimeId);
     else newTableActions = newTableActions.filter((c: any) => c.runtimeId !== selectedActionCard.runtimeId);
     
+    setMyHand(newHand);
+    setTableActions(newTableActions);
+
     const newPlays = playsRemaining - 1;
     setPlaysRemaining(newPlays);
 
@@ -633,6 +637,7 @@ export default function GameBoard() {
         
         const newDiscard = [actionCard, ...currentDiscard];
         setDiscardPile(newDiscard);
+        setMyHand(finalHand);
 
         await addLogAndSync(`Cast Geminio: drew ${actualDraw} extra cards!`, { drawPile: currentDeck, discardPile: newDiscard, playsRemaining: newPlays, lastSpellCast: { name: "GEMINIO", player: myName, id: Math.random() } }, { hand: finalHand, bank: myBank, properties: myProperties, character: myCharacter, isFrozen: isMyCharacterFrozen });
       } 
@@ -776,6 +781,7 @@ export default function GameBoard() {
     }
 
     const newHand = myHand.filter((c: any) => c.runtimeId !== card.runtimeId);
+    setMyHand(newHand);
 
     if (card.type === 'property') {
       const newProps = [...myProperties, card];
@@ -786,9 +792,9 @@ export default function GameBoard() {
       const isAny = card.colorSet?.includes("Any") || card.name.toLowerCase().includes("wild any");
       if (isAny && myProperties.length === 0) {
         alert("You cannot play an 'Every-Color Wild' card by itself. You must have at least one other item on the table first.");
+        setMyHand([...myHand, card]); // return to hand
         return; 
       }
-      setMyHand(newHand);
       setWildcardSelectionModal(card);
     } else if (card.type === 'money') {
       const newBank = [...myBank, card];
@@ -1035,6 +1041,8 @@ export default function GameBoard() {
                  const newBank = [...myBank, card];
                  const newPlays = playsRemaining - 1;
                  setPlaysRemaining(newPlays);
+                 setMyHand(newHand);
+                 setMyBank(newBank);
                  await addLogAndSync(`Added an action card to Bank.`, { playsRemaining: newPlays }, { hand: newHand, bank: newBank, properties: myProperties, character: myCharacter, isFrozen: isMyCharacterFrozen });
               }} className="flex-1 bg-amber-600 hover:bg-amber-500 text-stone-900 font-bold py-3 px-4 rounded-xl shadow border border-amber-400 transition">💰 Bank {selectedActionCard.value} Pts</button>
               <button onClick={() => resolveActionChoice('action')} className="flex-1 bg-purple-600 hover:bg-purple-500 text-white font-bold py-3 px-4 rounded-xl shadow border border-purple-400 transition">🪄 Cast Spell</button>
