@@ -111,6 +111,14 @@ export default function GameBoard() {
     if (myRole === 'player1') setP1Properties(newProps);
     else setP2Properties(newProps);
   };
+  const updateOpponentProperties = (newProps: any[]) => {
+    if (myRole === 'player1') setP2Properties(newProps);
+    else setP1Properties(newProps);
+  };
+  const updateOpponentBank = (newBank: any[]) => {
+    if (myRole === 'player1') setP2Bank(newBank);
+    else setP1Bank(newBank);
+  };
 
   const toggleWildcardColor = (card: any) => {
     const current = getCardColor(card);
@@ -481,7 +489,7 @@ export default function GameBoard() {
                      let extraOpp: any = {};
                      if (type === 'steal_card') {
                          extraOpp = { properties: [...opponentProperties, targetCard] };
-                         setOpponentProperties([...opponentProperties, targetCard]);
+                         updateOpponentProperties([...opponentProperties, targetCard]);
                      } else {
                          extraBoard = { ...extraBoard, discardPile: [targetCard, ...discardPile] };
                          setDiscardPile([targetCard, ...discardPile]);
@@ -492,7 +500,7 @@ export default function GameBoard() {
                      const cardsToSteal = myProperties.filter((c: any) => getCardColor(c) === tCol);
                      const newMyProps = myProperties.filter((c: any) => getCardColor(c) !== tCol);
                      updateMyProperties(newMyProps);
-                     setOpponentProperties([...opponentProperties, ...cardsToSteal]);
+                     updateOpponentProperties([...opponentProperties, ...cardsToSteal]);
                      await addLogAndSync(`The attack succeeded! ${opponentName} stole your ${tCol} set (No Protego available).`, { pendingAttack: null }, { properties: newMyProps }, { properties: [...opponentProperties, ...cardsToSteal] });
                  } else if (type === 'freeze') {
                      if (myRole === 'player1') setP1Frozen(true);
@@ -520,7 +528,7 @@ export default function GameBoard() {
                      let extraOpp: any = {};
                      if (type === 'steal_card') {
                          extraOpp = { properties: [...opponentProperties, targetCard] };
-                         setOpponentProperties([...opponentProperties, targetCard]);
+                         updateOpponentProperties([...opponentProperties, targetCard]);
                      } else {
                          extraBoard = { ...extraBoard, discardPile: [targetCard, ...discardPile] };
                          setDiscardPile([targetCard, ...discardPile]);
@@ -531,7 +539,7 @@ export default function GameBoard() {
                      const cardsToSteal = myProperties.filter((c: any) => getCardColor(c) === tCol);
                      const newMyProps = myProperties.filter((c: any) => getCardColor(c) !== tCol);
                      updateMyProperties(newMyProps);
-                     setOpponentProperties([...opponentProperties, ...cardsToSteal]);
+                     updateOpponentProperties([...opponentProperties, ...cardsToSteal]);
                      await addLogAndSync(`The attack succeeded! ${opponentName} stole your ${tCol} set.`, { pendingAttack: null }, { properties: newMyProps }, { properties: [...opponentProperties, ...cardsToSteal] });
                  } else if (type === 'freeze') {
                      if (myRole === 'player1') setP1Frozen(true);
@@ -583,7 +591,6 @@ export default function GameBoard() {
     const actionCard = selectedActionCard;
     setSelectedActionCard(null);
 
-    // ATOMIC ROLE-ISOLATED HAND STRIPPING & PLAY COUNT DEDUCTION
     const newHand = myHand.filter((c: any) => c.runtimeId !== actionCard.runtimeId);
     updateMyHand(newHand);
 
@@ -726,7 +733,7 @@ export default function GameBoard() {
     const newOppProps = [...opponentProperties.filter((c: any) => c.runtimeId !== opponentCard.runtimeId), myCard];
     
     updateMyProperties(newMyProps);
-    setOpponentProperties(newOppProps);
+    updateOpponentProperties(newOppProps);
 
     await addLogAndSync(
         `Confundo successful!`, 
@@ -859,13 +866,13 @@ export default function GameBoard() {
         newOppProps = opponentProperties.filter((c: any) => c.runtimeId !== cardToPay.runtimeId);
         newMyProps = [...myProperties, cardToPay];
         logMsg = `${opponentName} surrendered item: ${cardToPay.name}`;
-        setOpponentProperties(newOppProps);
+        updateOpponentProperties(newOppProps);
         updateMyProperties(newMyProps);
     } else {
         newOppBank = opponentBank.filter((c: any) => c.runtimeId !== cardToPay.runtimeId);
         newMyBank = [...myBank, cardToPay];
         logMsg = `${opponentName} paid a card from bank.`;
-        setOpponentBank(newOppBank);
+        updateOpponentBank(newOppBank);
         updateMyBank(newMyBank);
     }
     
@@ -898,13 +905,13 @@ export default function GameBoard() {
         newOppProps = [...opponentProperties, cardToPay];
         logMsg = `${myName} surrendered item: ${cardToPay.name}`;
         updateMyProperties(newMyProps);
-        setOpponentProperties(newOppProps);
+        updateOpponentProperties(newOppProps);
     } else {
         newMyBank = myBank.filter((c: any) => c.runtimeId !== cardToPay.runtimeId);
         newOppBank = [...opponentBank, cardToPay];
         logMsg = `${myName} paid ${cardToPay.value} points from bank.`;
         updateMyBank(newMyBank);
-        setOpponentBank(newOppBank);
+        updateOpponentBank(newOppBank);
     }
     
     if (playerPaymentPrompt) {
