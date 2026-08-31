@@ -73,7 +73,7 @@ export default function GameBoard() {
   const [unfreezeSelectedIds, setUnfreezeSelectedIds] = useState<string[]>([]);
   const [isDiscardModalOpen, setIsDiscardModalOpen] = useState<boolean>(false);
   const [targetSelectionModal, setTargetSelectionModal] = useState<{ type: 'levicorpus' | 'wingardium' | 'obliviate'; actionCard: any, cards: any[] } | null>(null);
-  const [confundoModal, setConfundoModal] = useState<{ step: 'my'; actionCard: any; chosenMyCard: any | null } | null>(null);
+  const [confundoModal, setConfundoModal] = useState<{ step: 'my' | 'opp'; actionCard: any; chosenMyCard: any | null } | null>(null);
   const [wildcardSelectionModal, setWildcardSelectionModal] = useState<any | null>(null);
   const [tableWildcardEditModal, setTableWildcardEditModal] = useState<any | null>(null);
   const [reparoModal, setReparoModal] = useState<any | null>(null);
