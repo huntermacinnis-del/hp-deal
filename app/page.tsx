@@ -833,7 +833,6 @@ export default function GameBoard() {
       setPlaysRemaining(newPlays);
       await addLogAndSync(`Added points to Bank.`, { playsRemaining: newPlays }, { hand: newHand, bank: newBank });
     } else if (card.type === 'action') {
-      // INSTANTLY REMOVE FROM HAND UPON CLICKING
       const newHand = myHand.filter((c: any) => c.runtimeId !== card.runtimeId);
       updateMyHand(newHand);
       setSelectedActionCard(card);
@@ -855,27 +854,30 @@ export default function GameBoard() {
     return sampleCard.rentValues[index];
   };
 
+  // FIXED PAYMENT VAULT HANDLER: SYNCS BOTH PARTIES ATOMICALLY IN REALTIME
   const handlePayWithCard = async (cardToPay: any, source: 'bank' | 'property') => {
-    let newOppBank = opponentBank;
-    let newOppProps = opponentProperties;
-    let newMyBank = myBank;
-    let newMyProps = myProperties;
+    let newOppBank = [...opponentBank];
+    let newOppProps = [...opponentProperties];
+    let newMyBank = [...myBank];
+    let newMyProps = [...myProperties];
     let logMsg = "";
 
     if (source === 'property') {
-        newOppProps = opponentProperties.filter((c: any) => c.runtimeId !== cardToPay.runtimeId);
-        newMyProps = [...myProperties, cardToPay];
+        newOppProps = newOppProps.filter((c: any) => c.runtimeId !== cardToPay.runtimeId);
+        newMyProps.push(cardToPay);
         logMsg = `${opponentName} surrendered item: ${cardToPay.name}`;
-        updateOpponentProperties(newOppProps);
-        updateMyProperties(newMyProps);
     } else {
-        newOppBank = opponentBank.filter((c: any) => c.runtimeId !== cardToPay.runtimeId);
-        newMyBank = [...myBank, cardToPay];
-        logMsg = `${opponentName} paid a card from bank.`;
-        updateOpponentBank(newOppBank);
-        updateMyBank(newMyBank);
+        newOppBank = newOppBank.filter((c: any) => c.runtimeId !== cardToPay.runtimeId);
+        newMyBank.push(cardToPay);
+        logMsg = `${opponentName} paid a ${cardToPay.value}-point card from bank.`;
     }
     
+    // Update local states for both sides
+    updateMyBank(newMyBank);
+    updateMyProperties(newMyProps);
+    updateOpponentBank(newOppBank);
+    updateOpponentProperties(newOppProps);
+
     if (paymentPrompt) {
       const cardValue = Number(cardToPay.value) || 1;
       const remaining = paymentPrompt.amount - cardValue;
@@ -885,47 +887,48 @@ export default function GameBoard() {
       if (remaining <= 0 || remainingAssets === 0) {
         setPaymentPrompt(null);
         setIsPaymentVaultOpen(false);
-        await addLogAndSync(`${logMsg} Payment complete.`, { pendingAttack: null }, {}, {});
+        await addLogAndSync(`${logMsg} Payment complete.`, { pendingAttack: null }, { bank: newMyBank, properties: newMyProps }, { bank: newOppBank, properties: newOppProps });
       } else {
         setPaymentPrompt({ ...paymentPrompt, amount: remaining });
-        await addLogAndSync(`${logMsg}`, {}, {}, {});
+        await addLogAndSync(`${logMsg}`, {}, { bank: newMyBank, properties: newMyProps }, { bank: newOppBank, properties: newOppProps });
       }
     }
   };
 
   const handlePlayerPayToOpponent = async (cardToPay: any, source: 'bank' | 'property') => {
-    let newMyBank = myBank;
-    let newMyProps = myProperties;
-    let newOppBank = opponentBank;
-    let newOppProps = opponentProperties;
+    let newMyBank = [...myBank];
+    let newMyProps = [...myProperties];
+    let newOppBank = [...opponentBank];
+    let newOppProps = [...opponentProperties];
     let logMsg = "";
 
     if (source === 'property') {
-        newMyProps = myProperties.filter((c: any) => c.runtimeId !== cardToPay.runtimeId);
-        newOppProps = [...opponentProperties, cardToPay];
+        newMyProps = newMyProps.filter((c: any) => c.runtimeId !== cardToPay.runtimeId);
+        newOppProps.push(cardToPay);
         logMsg = `${myName} surrendered item: ${cardToPay.name}`;
-        updateMyProperties(newMyProps);
-        updateOpponentProperties(newOppProps);
     } else {
-        newMyBank = myBank.filter((c: any) => c.runtimeId !== cardToPay.runtimeId);
-        newOppBank = [...opponentBank, cardToPay];
+        newMyBank = newMyBank.filter((c: any) => c.runtimeId !== cardToPay.runtimeId);
+        newOppBank.push(cardToPay);
         logMsg = `${myName} paid ${cardToPay.value} points from bank.`;
-        updateMyBank(newMyBank);
-        updateOpponentBank(newOppBank);
     }
+
+    updateMyBank(newMyBank);
+    updateMyProperties(newMyProps);
+    updateOpponentBank(newOppBank);
+    updateOpponentProperties(newOppProps);
     
     if (playerPaymentPrompt) {
       const cardValue = Number(cardToPay.value) || 1;
       const remaining = playerPaymentPrompt.amount - cardValue;
-      const remainingAssets = myBank.reduce((sum: number, c: any) => sum + (Number(c.value) || 0), 0) + 
-                              myProperties.filter((c: any) => getCardColor(c) !== harryProtectedColor && c.type !== 'wildcard').reduce((sum: number, c: any) => sum + (Number(c.value) || 1), 0);
+      const remainingAssets = newMyBank.reduce((sum: number, c: any) => sum + (Number(c.value) || 0), 0) + 
+                              newMyProps.filter((c: any) => getCardColor(c) !== harryProtectedColor && c.type !== 'wildcard').reduce((sum: number, c: any) => sum + (Number(c.value) || 1), 0);
 
       if (remaining <= 0 || remainingAssets === 0) {
         setPlayerPaymentPrompt(null);
-        await addLogAndSync(`${logMsg} Payment complete.`, {}, {}, {});
+        await addLogAndSync(`${logMsg} Payment complete.`, {}, { bank: newMyBank, properties: newMyProps }, { bank: newOppBank, properties: newOppProps });
       } else {
         setPlayerPaymentPrompt({ ...playerPaymentPrompt, amount: remaining });
-        await addLogAndSync(`${logMsg}`, {}, {}, {});
+        await addLogAndSync(`${logMsg}`, {}, { bank: newMyBank, properties: newMyProps }, { bank: newOppBank, properties: newOppProps });
       }
     }
   };
