@@ -163,7 +163,7 @@ export default function GameBoard() {
     initGame();
   }, []);
 
-  // Supabase Real-time Sync
+  // Supabase Real-time Sync (DO NOT overwrite local hand if we are mid-action update)
   useEffect(() => {
     async function fetchRoom() {
       const { data } = await supabase.from('game_rooms').select('*').eq('id', ROOM_ID).single();
@@ -179,17 +179,17 @@ export default function GameBoard() {
       .subscribe();
 
     return () => { supabase.removeChannel(channel); };
-  }, []);
+  }, [myRole]);
 
   const applyRemoteState = (data: any) => {
-    if (data.player1_state) {
+    if (data.player1_state && myRole !== 'player1') {
       setP1Hand(data.player1_state.hand || []);
       setP1Bank(data.player1_state.bank || []);
       setP1Properties(data.player1_state.properties || []);
       setP1Character(data.player1_state.character || null);
       setP1Frozen(!!data.player1_state.isFrozen);
     }
-    if (data.player2_state) {
+    if (data.player2_state && myRole !== 'player2') {
       setP2Hand(data.player2_state.hand || []);
       setP2Bank(data.player2_state.bank || []);
       setP2Properties(data.player2_state.properties || []);
@@ -496,7 +496,6 @@ export default function GameBoard() {
              return;
          }
 
-         // HAS PROTEGO: SHOW NON-BOUNCING WINDOW BUT ALLOW 15S TO REACT AND REVERSE
          setPlayerDefenseWindow({
              attackName: `${opponentName} played ${actionCard.name}!`,
              attackDescription: description,
@@ -532,6 +531,7 @@ export default function GameBoard() {
                  
                  setPlayerDefenseWindow(null);
                  triggerSpellAnimation("PROTEGO", myName);
+                 setMyHand(newHand);
                  await addLogAndSync(
                      `🛡️ ${myName} blocked the attack with Protego!`, 
                      { discardPile: [protegoCard, actionCard, ...discardPile], pendingAttack: null },
@@ -565,29 +565,25 @@ export default function GameBoard() {
   const resolveActionChoice = async (choice: 'bank' | 'action') => {
     if (!selectedActionCard) return;
 
-    const cardInHand = myHand.find((c: any) => c.runtimeId === selectedActionCard.runtimeId);
-    let newHand = [...myHand];
-    let newTableActions = [...tableActions];
+    const actionCard = selectedActionCard;
+    setSelectedActionCard(null);
 
-    if (cardInHand) newHand = newHand.filter((c: any) => c.runtimeId !== selectedActionCard.runtimeId);
-    else newTableActions = newTableActions.filter((c: any) => c.runtimeId !== selectedActionCard.runtimeId);
-    
+    // STRICTLY REMOVE FROM HAND & DEDUCT PLAY COUNT LOCALLY FIRST
+    const newHand = myHand.filter((c: any) => c.runtimeId !== actionCard.runtimeId);
     setMyHand(newHand);
-    setTableActions(newTableActions);
 
     const newPlays = playsRemaining - 1;
     setPlaysRemaining(newPlays);
 
-    if (choice === 'bank') {
-      const newBank = [...myBank, selectedActionCard];
-      setMyBank(newBank);
-      setSelectedActionCard(null);
-      await addLogAndSync(`Added an action card to Bank.`, { playsRemaining: newPlays }, { hand: newHand, bank: newBank, properties: myProperties, character: myCharacter, isFrozen: isMyCharacterFrozen });
-    } else {
-      const actionCard = selectedActionCard;
-      setSelectedActionCard(null);
-      const actionName = (actionCard.name || "").toLowerCase();
+    const newDiscard = [actionCard, ...discardPile];
+    setDiscardPile(newDiscard);
 
+    if (choice === 'bank') {
+      const newBank = [...myBank, actionCard];
+      setMyBank(newBank);
+      await addLogAndSync(`Added an action card to Bank.`, { playsRemaining: newPlays, discardPile: newDiscard }, { hand: newHand, bank: newBank, properties: myProperties, character: myCharacter, isFrozen: isMyCharacterFrozen });
+    } else {
+      const actionName = (actionCard.name || "").toLowerCase();
       triggerSpellAnimation(actionCard.name.toUpperCase(), myName);
 
       if (actionName.includes("accio") || actionName.includes("rent")) {
@@ -609,7 +605,7 @@ export default function GameBoard() {
 
         if (validColors.length === 0) {
           alert("You don't own any items in those colors to collect points for!");
-          await addLogAndSync(`Played ${actionCard.name}, but you don't own items in those colors.`, { playsRemaining: newPlays, discardPile: [actionCard, ...discardPile] }, { hand: newHand, bank: myBank, properties: myProperties, character: myCharacter, isFrozen: isMyCharacterFrozen });
+          await addLogAndSync(`Played ${actionCard.name}, but you don't own items in those colors.`, { playsRemaining: newPlays, discardPile: newDiscard }, { hand: newHand, bank: myBank, properties: myProperties, character: myCharacter, isFrozen: isMyCharacterFrozen });
         } else if (validColors.length === 1) {
           const ptsAmt = calculatePointsForColor(validColors[0]);
           await triggerNetworkAttack(actionCard, `Charging ${ptsAmt} points for their ${validColors[0]} set!`, { type: 'payment', amount: ptsAmt, reason: `Points for ${validColors[0]} Set` });
@@ -634,9 +630,6 @@ export default function GameBoard() {
         const actualDraw = Math.min(2, currentDeck.length);
         const drawn = currentDeck.splice(0, actualDraw);
         const finalHand = [...newHand, ...drawn];
-        
-        const newDiscard = [actionCard, ...currentDiscard];
-        setDiscardPile(newDiscard);
         setMyHand(finalHand);
 
         await addLogAndSync(`Cast Geminio: drew ${actualDraw} extra cards!`, { drawPile: currentDeck, discardPile: newDiscard, playsRemaining: newPlays, lastSpellCast: { name: "GEMINIO", player: myName, id: Math.random() } }, { hand: finalHand, bank: myBank, properties: myProperties, character: myCharacter, isFrozen: isMyCharacterFrozen });
@@ -780,10 +773,9 @@ export default function GameBoard() {
       return;
     }
 
-    const newHand = myHand.filter((c: any) => c.runtimeId !== card.runtimeId);
-    setMyHand(newHand);
-
     if (card.type === 'property') {
+      const newHand = myHand.filter((c: any) => c.runtimeId !== card.runtimeId);
+      setMyHand(newHand);
       const newProps = [...myProperties, card];
       const newPlays = playsRemaining - 1;
       setPlaysRemaining(newPlays);
@@ -792,11 +784,14 @@ export default function GameBoard() {
       const isAny = card.colorSet?.includes("Any") || card.name.toLowerCase().includes("wild any");
       if (isAny && myProperties.length === 0) {
         alert("You cannot play an 'Every-Color Wild' card by itself. You must have at least one other item on the table first.");
-        setMyHand([...myHand, card]); // return to hand
         return; 
       }
+      const newHand = myHand.filter((c: any) => c.runtimeId !== card.runtimeId);
+      setMyHand(newHand);
       setWildcardSelectionModal(card);
     } else if (card.type === 'money') {
+      const newHand = myHand.filter((c: any) => c.runtimeId !== card.runtimeId);
+      setMyHand(newHand);
       const newBank = [...myBank, card];
       const newPlays = playsRemaining - 1;
       setPlaysRemaining(newPlays);
