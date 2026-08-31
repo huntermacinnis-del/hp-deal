@@ -182,14 +182,14 @@ export default function GameBoard() {
   }, [myRole]);
 
   const applyRemoteState = (data: any) => {
-    if (data.player1_state && myRole !== 'player1') {
+    if (data.player1_state) {
       setP1Hand(data.player1_state.hand || []);
       setP1Bank(data.player1_state.bank || []);
       setP1Properties(data.player1_state.properties || []);
       setP1Character(data.player1_state.character || null);
       setP1Frozen(!!data.player1_state.isFrozen);
     }
-    if (data.player2_state && myRole !== 'player2') {
+    if (data.player2_state) {
       setP2Hand(data.player2_state.hand || []);
       setP2Bank(data.player2_state.bank || []);
       setP2Properties(data.player2_state.properties || []);
@@ -277,7 +277,7 @@ export default function GameBoard() {
       discardPile: [],
       activeTurn: 'player1',
       turnPhase: 'draw',
-      playsRemaining: p1Char.name === 'Hermione Granger' ? 4 : 3,
+      playsRemaining: p1Char?.name === 'Hermione Granger' ? 4 : 3,
       winner: null,
       winRecorded: false,
       harryProtectedColor: null,
@@ -285,11 +285,16 @@ export default function GameBoard() {
       pendingAttack: null,
       hunterWins: hunterWins,
       jessWins: jessWins,
-      gameLog: [`Game started! Hunter (${p1Char.name}) vs Jess (${p2Char.name}).`],
+      gameLog: [`Game started! Hunter (${p1Char?.name || 'Character'}) vs Jess (${p2Char?.name || 'Character'}).`],
       isGameStarted: true
     };
 
     setIsGameStarted(true);
+    setP1Hand(p1StartingHand);
+    setP1Character(p1Char);
+    setP2Hand(p2StartingHand);
+    setP2Character(p2Char);
+
     await syncGameState({ player1_state: initialP1, player2_state: initialP2, board_state: initialBoard });
   };
 
@@ -446,7 +451,6 @@ export default function GameBoard() {
     );
   };
 
-  // INSTANT ATTACK RESOLUTION WITH ASYNCHRONOUS PROTEGO REACTION
   useEffect(() => {
      if (pendingAttack && pendingAttack.target === myRole) {
          const { actionCard, description, type, amount, reason } = pendingAttack;
