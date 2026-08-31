@@ -975,8 +975,6 @@ export default function GameBoard() {
         .animate-spell-pop { animation: spellPop 1.8s ease-out forwards; }
       `}</style>
 
-      {/* RESTORED MODAL UI BLOCK */}
-
       {selectedActionCard && (
         <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/60 backdrop-blur-sm">
           <div className="bg-stone-900 border-2 border-purple-500 p-6 rounded-2xl shadow-2xl flex flex-col items-center max-w-sm text-center">
@@ -1577,7 +1575,8 @@ function PlayingCard({
     );
   }
 
-  if (isBank) {
+  // CORRECTLY HANDLE MONEY CARDS IN HAND OR BANK
+  if (isBank || type === "money") {
     let moneyBg = "bg-amber-100 text-stone-900";
     if (value === 1) moneyBg = "bg-slate-300 text-stone-900";
     else if (value === 2) moneyBg = "bg-red-600 text-white";
