@@ -914,14 +914,14 @@ export default function GameBoard() {
   const oppBankTotal = opponentBank.reduce((sum: number, c: any) => sum + (Number(c.value) || 0), 0);
 
   const groupedMyProperties = myProperties.reduce((acc: any, card: any) => {
-    const col = getCardColor(card);
+    const col = getCardColor(card) || "Black";
     if (!acc[col]) acc[col] = [];
     acc[col].push(card);
     return acc;
   }, {});
 
   const groupedOpponentProperties = opponentProperties.reduce((acc: any, card: any) => {
-    const col = getCardColor(card);
+    const col = getCardColor(card) || "Black";
     if (!acc[col]) acc[col] = [];
     acc[col].push(card);
     return acc;
