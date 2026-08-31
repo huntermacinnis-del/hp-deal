@@ -591,10 +591,6 @@ export default function GameBoard() {
     const actionCard = selectedActionCard;
     setSelectedActionCard(null);
 
-    // CRITICAL FIX: IMMEDIATELY REMOVE CARD FROM HAND AND SYNC LOCALLY & REMOTELY BEFORE MODAL ROUTING
-    const newHand = myHand.filter((c: any) => c.runtimeId !== actionCard.runtimeId);
-    updateMyHand(newHand);
-
     const newPlays = playsRemaining - 1;
     setPlaysRemaining(newPlays);
 
@@ -604,7 +600,7 @@ export default function GameBoard() {
     if (choice === 'bank') {
       const newBank = [...myBank, actionCard];
       updateMyBank(newBank);
-      await addLogAndSync(`Added an action card to Bank.`, { playsRemaining: newPlays, discardPile: newDiscard }, { hand: newHand, bank: newBank });
+      await addLogAndSync(`Added an action card to Bank.`, { playsRemaining: newPlays, discardPile: newDiscard }, { bank: newBank });
     } else {
       const actionName = (actionCard.name || "").toLowerCase();
       triggerSpellAnimation(actionCard.name.toUpperCase(), myName);
@@ -628,7 +624,7 @@ export default function GameBoard() {
 
         if (validColors.length === 0) {
           alert("You don't own any items in those colors to collect points for!");
-          await addLogAndSync(`Played ${actionCard.name}, but you don't own items in those colors.`, { playsRemaining: newPlays, discardPile: newDiscard }, { hand: newHand });
+          await addLogAndSync(`Played ${actionCard.name}, but you don't own items in those colors.`, { playsRemaining: newPlays, discardPile: newDiscard }, {});
         } else if (validColors.length === 1) {
           const ptsAmt = calculatePointsForColor(validColors[0]);
           await triggerNetworkAttack(actionCard, `Charging ${ptsAmt} points for their ${validColors[0]} set!`, { type: 'payment', amount: ptsAmt, reason: `Points for ${validColors[0]} Set` });
@@ -652,7 +648,7 @@ export default function GameBoard() {
         }
         const actualDraw = Math.min(2, currentDeck.length);
         const drawn = currentDeck.splice(0, actualDraw);
-        const finalHand = [...newHand, ...drawn];
+        const finalHand = [...myHand, ...drawn];
         updateMyHand(finalHand);
         setDrawPile(currentDeck);
         setDiscardPile(currentDiscard);
@@ -837,7 +833,7 @@ export default function GameBoard() {
       setPlaysRemaining(newPlays);
       await addLogAndSync(`Added points to Bank.`, { playsRemaining: newPlays }, { hand: newHand, bank: newBank });
     } else if (card.type === 'action') {
-      // IMMEDIATELY REMOVE CARD FROM HAND ON CLICKING TO PLAY ACTION
+      // INSTANTLY REMOVE FROM HAND UPON CLICKING
       const newHand = myHand.filter((c: any) => c.runtimeId !== card.runtimeId);
       updateMyHand(newHand);
       setSelectedActionCard(card);
