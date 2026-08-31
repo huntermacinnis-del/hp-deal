@@ -98,32 +98,20 @@ export default function GameBoard() {
   const opponentCharacter = myRole === 'player1' ? p2Character : p1Character;
   const isOpponentFrozen = myRole === 'player1' ? p2Frozen : p1Frozen;
 
-  // Bulletproof Wrapper Setters
-  const setMyHand = (updater: any) => {
-    const val = typeof updater === 'function' ? updater(myHand) : updater;
-    if (myRole === 'player1') setP1Hand(val);
-    else setP2Hand(val);
+  // Bulletproof Wrapper Setters with Role Isolation
+  const updateMyHand = (newHand: any[]) => {
+    if (myRole === 'player1') setP1Hand(newHand);
+    else setP2Hand(newHand);
   };
-  const setMyBank = (updater: any) => {
-    const val = typeof updater === 'function' ? updater(myBank) : updater;
-    if (myRole === 'player1') setP1Bank(val);
-    else setP2Bank(val);
+  const updateMyBank = (newBank: any[]) => {
+    if (myRole === 'player1') setP1Bank(newBank);
+    else setP2Bank(newBank);
   };
-  const setMyProperties = (updater: any) => {
-    const val = typeof updater === 'function' ? updater(myProperties) : updater;
-    if (myRole === 'player1') setP1Properties(val);
-    else setP2Properties(val);
+  const updateMyProperties = (newProps: any[]) => {
+    if (myRole === 'player1') setP1Properties(newProps);
+    else setP2Properties(newProps);
   };
-  const setOpponentProperties = (updater: any) => {
-    const val = typeof updater === 'function' ? updater(opponentProperties) : updater;
-    if (myRole === 'player1') setP2Properties(val);
-    else setP1Properties(val);
-  };
-  const setOpponentBank = (updater: any) => {
-    const val = typeof updater === 'function' ? updater(opponentBank) : updater;
-    if (myRole === 'player1') setP2Bank(val);
-    else setP1Bank(val);
-  };
+
   const toggleWildcardColor = (card: any) => {
     const current = getCardColor(card);
     const colors = card.colorSet ? card.colorSet.split("/") : [];
@@ -364,10 +352,18 @@ export default function GameBoard() {
     const newLog = [message, ...gameLog];
     setGameLog(newLog);
     
+    const myStatePayload = myRole === 'player1' 
+      ? { hand: p1Hand, bank: p1Bank, properties: p1Properties, character: p1Character, isFrozen: p1Frozen, ...extraMyStateUpdates }
+      : { hand: p2Hand, bank: p2Bank, properties: p2Properties, character: p2Character, isFrozen: p2Frozen, ...extraMyStateUpdates };
+
+    const oppStatePayload = myRole === 'player1'
+      ? { hand: p2Hand, bank: p2Bank, properties: p2Properties, character: p2Character, isFrozen: p2Frozen, ...extraOppStateUpdates }
+      : { hand: p1Hand, bank: p1Bank, properties: p1Properties, character: p1Character, isFrozen: p1Frozen, ...extraOppStateUpdates };
+
     await syncGameState({
       board_state: { drawPile, discardPile, activeTurn, turnPhase, playsRemaining, winner, winRecorded, harryProtectedColor, wildCardColors, hunterWins, jessWins, isGameStarted, pendingAttack, gameLog: newLog, ...extraBoardUpdates },
-      ...(Object.keys(extraMyStateUpdates).length > 0 ? { [myRole === 'player1' ? 'player1_state' : 'player2_state']: extraMyStateUpdates } : {}),
-      ...(Object.keys(extraOppStateUpdates).length > 0 ? { [myRole === 'player1' ? 'player2_state' : 'player1_state']: extraOppStateUpdates } : {})
+      [myRole === 'player1' ? 'player1_state' : 'player2_state']: myStatePayload,
+      [myRole === 'player1' ? 'player2_state' : 'player1_state']: oppStatePayload
     });
   };
 
@@ -401,7 +397,7 @@ export default function GameBoard() {
     const newHand = [...myHand, ...drawn];
     const plays = (!isMyCharacterFrozen && myCharacter?.name === "Hermione Granger") ? 4 : 3;
 
-    setMyHand(newHand);
+    updateMyHand(newHand);
     setDrawPile(currentDeck);
     setDiscardPile(currentDiscard);
     setTurnPhase('play');
@@ -410,7 +406,7 @@ export default function GameBoard() {
     await addLogAndSync(
         `${myName} drew ${actualCount} cards.`, 
         { drawPile: currentDeck, discardPile: currentDiscard, turnPhase: 'play', playsRemaining: plays }, 
-        { hand: newHand, bank: myBank, properties: myProperties, character: myCharacter, isFrozen: isMyCharacterFrozen }
+        { hand: newHand }
     );
   };
 
@@ -423,14 +419,14 @@ export default function GameBoard() {
     const plays = (!isMyCharacterFrozen && myCharacter?.name === "Hermione Granger") ? 4 : 3;
 
     setDiscardPile(remainingDiscard);
-    setMyHand(newHand);
+    updateMyHand(newHand);
     setTurnPhase('play');
     setPlaysRemaining(plays);
 
     await addLogAndSync(
         `Cedric Diggory ability: ${myName} drew 2 cards from the discard pile.`, 
         { discardPile: remainingDiscard, turnPhase: 'play', playsRemaining: plays }, 
-        { hand: newHand, bank: myBank, properties: myProperties, character: myCharacter, isFrozen: isMyCharacterFrozen }
+        { hand: newHand }
     );
   };
 
@@ -480,21 +476,28 @@ export default function GameBoard() {
                  } else if (type === 'steal_card' || type === 'discard_card') {
                      const targetCard = pendingAttack.targetCard;
                      const newMyProps = myProperties.filter((c: any) => c.runtimeId !== targetCard.runtimeId);
+                     updateMyProperties(newMyProps);
                      let extraBoard: any = { pendingAttack: null };
                      let extraOpp: any = {};
                      if (type === 'steal_card') {
-                         extraOpp = { properties: [...opponentProperties, targetCard], hand: opponentHand, bank: opponentBank, character: opponentCharacter, isFrozen: isOpponentFrozen };
+                         extraOpp = { properties: [...opponentProperties, targetCard] };
+                         setOpponentProperties([...opponentProperties, targetCard]);
                      } else {
                          extraBoard = { ...extraBoard, discardPile: [targetCard, ...discardPile] };
+                         setDiscardPile([targetCard, ...discardPile]);
                      }
-                     await addLogAndSync(`The attack succeeded on ${targetCard.name} (No Protego available).`, extraBoard, { properties: newMyProps, hand: myHand, bank: myBank, character: myCharacter, isFrozen: isMyCharacterFrozen }, extraOpp);
+                     await addLogAndSync(`The attack succeeded on ${targetCard.name} (No Protego available).`, extraBoard, { properties: newMyProps }, extraOpp);
                  } else if (type === 'steal_set') {
                      const tCol = pendingAttack.targetColor;
                      const cardsToSteal = myProperties.filter((c: any) => getCardColor(c) === tCol);
                      const newMyProps = myProperties.filter((c: any) => getCardColor(c) !== tCol);
-                     await addLogAndSync(`The attack succeeded! ${opponentName} stole your ${tCol} set (No Protego available).`, { pendingAttack: null }, { properties: newMyProps, hand: myHand, bank: myBank, character: myCharacter, isFrozen: isMyCharacterFrozen }, { properties: [...opponentProperties, ...cardsToSteal], hand: opponentHand, bank: opponentBank, character: opponentCharacter, isFrozen: isOpponentFrozen });
+                     updateMyProperties(newMyProps);
+                     setOpponentProperties([...opponentProperties, ...cardsToSteal]);
+                     await addLogAndSync(`The attack succeeded! ${opponentName} stole your ${tCol} set (No Protego available).`, { pendingAttack: null }, { properties: newMyProps }, { properties: [...opponentProperties, ...cardsToSteal] });
                  } else if (type === 'freeze') {
-                     await addLogAndSync(`The curse hit! ${myName} is frozen (No Protego available).`, { pendingAttack: null }, { isFrozen: true, properties: myProperties, hand: myHand, bank: myBank, character: myCharacter }, {});
+                     if (myRole === 'player1') setP1Frozen(true);
+                     else setP2Frozen(true);
+                     await addLogAndSync(`The curse hit! ${myName} is frozen (No Protego available).`, { pendingAttack: null }, { isFrozen: true }, {});
                  }
              })();
              return;
@@ -512,21 +515,28 @@ export default function GameBoard() {
                  } else if (type === 'steal_card' || type === 'discard_card') {
                      const targetCard = pendingAttack.targetCard;
                      const newMyProps = myProperties.filter((c: any) => c.runtimeId !== targetCard.runtimeId);
+                     updateMyProperties(newMyProps);
                      let extraBoard: any = { pendingAttack: null };
                      let extraOpp: any = {};
                      if (type === 'steal_card') {
-                         extraOpp = { properties: [...opponentProperties, targetCard], hand: opponentHand, bank: opponentBank, character: opponentCharacter, isFrozen: isOpponentFrozen };
+                         extraOpp = { properties: [...opponentProperties, targetCard] };
+                         setOpponentProperties([...opponentProperties, targetCard]);
                      } else {
                          extraBoard = { ...extraBoard, discardPile: [targetCard, ...discardPile] };
+                         setDiscardPile([targetCard, ...discardPile]);
                      }
-                     await addLogAndSync(`The attack succeeded on ${targetCard.name}.`, extraBoard, { properties: newMyProps, hand: myHand, bank: myBank, character: myCharacter, isFrozen: isMyCharacterFrozen }, extraOpp);
+                     await addLogAndSync(`The attack succeeded on ${targetCard.name}.`, extraBoard, { properties: newMyProps }, extraOpp);
                  } else if (type === 'steal_set') {
                      const tCol = pendingAttack.targetColor;
                      const cardsToSteal = myProperties.filter((c: any) => getCardColor(c) === tCol);
                      const newMyProps = myProperties.filter((c: any) => getCardColor(c) !== tCol);
-                     await addLogAndSync(`The attack succeeded! ${opponentName} stole your ${tCol} set.`, { pendingAttack: null }, { properties: newMyProps, hand: myHand, bank: myBank, character: myCharacter, isFrozen: isMyCharacterFrozen }, { properties: [...opponentProperties, ...cardsToSteal], hand: opponentHand, bank: opponentBank, character: opponentCharacter, isFrozen: isOpponentFrozen });
+                     updateMyProperties(newMyProps);
+                     setOpponentProperties([...opponentProperties, ...cardsToSteal]);
+                     await addLogAndSync(`The attack succeeded! ${opponentName} stole your ${tCol} set.`, { pendingAttack: null }, { properties: newMyProps }, { properties: [...opponentProperties, ...cardsToSteal] });
                  } else if (type === 'freeze') {
-                     await addLogAndSync(`The curse hit! ${myName} is frozen.`, { pendingAttack: null }, { isFrozen: true, properties: myProperties, hand: myHand, bank: myBank, character: myCharacter }, {});
+                     if (myRole === 'player1') setP1Frozen(true);
+                     else setP2Frozen(true);
+                     await addLogAndSync(`The curse hit! ${myName} is frozen.`, { pendingAttack: null }, { isFrozen: true }, {});
                  }
              },
              onCounterProtego: async () => {
@@ -535,11 +545,12 @@ export default function GameBoard() {
                  
                  setPlayerDefenseWindow(null);
                  triggerSpellAnimation("PROTEGO", myName);
-                 setMyHand(newHand);
+                 updateMyHand(newHand);
+                 setDiscardPile([protegoCard, actionCard, ...discardPile]);
                  await addLogAndSync(
                      `🛡️ ${myName} blocked the attack with Protego!`, 
                      { discardPile: [protegoCard, actionCard, ...discardPile], pendingAttack: null },
-                     { hand: newHand, bank: myBank, properties: myProperties, character: myCharacter, isFrozen: isMyCharacterFrozen }
+                     { hand: newHand }
                  );
              }
          });
@@ -572,8 +583,9 @@ export default function GameBoard() {
     const actionCard = selectedActionCard;
     setSelectedActionCard(null);
 
+    // ATOMIC ROLE-ISOLATED HAND STRIPPING & PLAY COUNT DEDUCTION
     const newHand = myHand.filter((c: any) => c.runtimeId !== actionCard.runtimeId);
-    setMyHand(newHand);
+    updateMyHand(newHand);
 
     const newPlays = playsRemaining - 1;
     setPlaysRemaining(newPlays);
@@ -583,8 +595,8 @@ export default function GameBoard() {
 
     if (choice === 'bank') {
       const newBank = [...myBank, actionCard];
-      setMyBank(newBank);
-      await addLogAndSync(`Added an action card to Bank.`, { playsRemaining: newPlays, discardPile: newDiscard }, { hand: newHand, bank: newBank, properties: myProperties, character: myCharacter, isFrozen: isMyCharacterFrozen });
+      updateMyBank(newBank);
+      await addLogAndSync(`Added an action card to Bank.`, { playsRemaining: newPlays, discardPile: newDiscard }, { hand: newHand, bank: newBank });
     } else {
       const actionName = (actionCard.name || "").toLowerCase();
       triggerSpellAnimation(actionCard.name.toUpperCase(), myName);
@@ -608,7 +620,7 @@ export default function GameBoard() {
 
         if (validColors.length === 0) {
           alert("You don't own any items in those colors to collect points for!");
-          await addLogAndSync(`Played ${actionCard.name}, but you don't own items in those colors.`, { playsRemaining: newPlays, discardPile: newDiscard }, { hand: newHand, bank: myBank, properties: myProperties, character: myCharacter, isFrozen: isMyCharacterFrozen });
+          await addLogAndSync(`Played ${actionCard.name}, but you don't own items in those colors.`, { playsRemaining: newPlays, discardPile: newDiscard }, { hand: newHand });
         } else if (validColors.length === 1) {
           const ptsAmt = calculatePointsForColor(validColors[0]);
           await triggerNetworkAttack(actionCard, `Charging ${ptsAmt} points for their ${validColors[0]} set!`, { type: 'payment', amount: ptsAmt, reason: `Points for ${validColors[0]} Set` });
@@ -624,7 +636,7 @@ export default function GameBoard() {
       }
       else if (actionName.includes("geminio")) {
         let currentDeck = [...drawPile];
-        let currentDiscard = [...discardPile];
+        let currentDiscard = [...newDiscard];
         if (currentDeck.length < 2) {
           const shuffled = shuffleArray(currentDiscard);
           currentDeck = [...currentDeck, ...shuffled];
@@ -633,9 +645,11 @@ export default function GameBoard() {
         const actualDraw = Math.min(2, currentDeck.length);
         const drawn = currentDeck.splice(0, actualDraw);
         const finalHand = [...newHand, ...drawn];
-        setMyHand(finalHand);
+        updateMyHand(finalHand);
+        setDrawPile(currentDeck);
+        setDiscardPile(currentDiscard);
 
-        await addLogAndSync(`Cast Geminio: drew ${actualDraw} extra cards!`, { drawPile: currentDeck, discardPile: newDiscard, playsRemaining: newPlays, lastSpellCast: { name: "GEMINIO", player: myName, id: Math.random() } }, { hand: finalHand, bank: myBank, properties: myProperties, character: myCharacter, isFrozen: isMyCharacterFrozen });
+        await addLogAndSync(`Cast Geminio: drew ${actualDraw} extra cards!`, { drawPile: currentDeck, discardPile: currentDiscard, playsRemaining: newPlays, lastSpellCast: { name: "GEMINIO", player: myName, id: Math.random() } }, { hand: finalHand });
       } 
       else if (actionName.includes("levicorpus")) {
         const isDraco = myCharacter?.name === "Draco Malfoy" && !isMyCharacterFrozen;
@@ -711,11 +725,14 @@ export default function GameBoard() {
     const newMyProps = [...myProperties.filter((c: any) => c.runtimeId !== myCard.runtimeId), opponentCard];
     const newOppProps = [...opponentProperties.filter((c: any) => c.runtimeId !== opponentCard.runtimeId), myCard];
     
+    updateMyProperties(newMyProps);
+    setOpponentProperties(newOppProps);
+
     await addLogAndSync(
         `Confundo successful!`, 
         { discardPile: newDiscard, lastSpellCast: { name: "CONFUNDO", player: myName, id: Math.random() } }, 
-        { properties: newMyProps, hand: myHand, bank: myBank, character: myCharacter, isFrozen: isMyCharacterFrozen },
-        { properties: newOppProps, hand: opponentHand, bank: opponentBank, character: opponentCharacter, isFrozen: isOpponentFrozen }
+        { properties: newMyProps },
+        { properties: newOppProps }
     );
   };
 
@@ -726,24 +743,34 @@ export default function GameBoard() {
 
     const newDiscard = discardPile.filter((c: any) => c.runtimeId !== card.runtimeId);
     newDiscard.unshift(actionCard); 
+    setDiscardPile(newDiscard);
     
-    let newHand = myHand;
-    let newProps = myProperties;
-    let newBank = myBank;
-    let newTableActions = tableActions;
+    let newHand = [...myHand];
+    let newProps = [...myProperties];
+    let newBank = [...myBank];
+    let newTableActions = [...tableActions];
 
-    if (card.type === 'property') newProps = [...myProperties, card];
-    else if (card.type === 'wildcard') { setWildcardSelectionModal(card); return; }
-    else if (card.type === 'money') newBank = [...myBank, card];
-    else if (card.type === 'action') newTableActions = [...tableActions, card]; 
-    else newHand = [...myHand, card];
-
-    setTableActions(newTableActions);
+    if (card.type === 'property') {
+      newProps.push(card);
+      updateMyProperties(newProps);
+    } else if (card.type === 'wildcard') { 
+      setWildcardSelectionModal(card); 
+      return; 
+    } else if (card.type === 'money') {
+      newBank.push(card);
+      updateMyBank(newBank);
+    } else if (card.type === 'action') {
+      newTableActions.push(card);
+      setTableActions(newTableActions);
+    } else {
+      newHand.push(card);
+      updateMyHand(newHand);
+    }
 
     await addLogAndSync(
         `${myName} cast Reparo and recovered ${card.name}!`, 
         { discardPile: newDiscard }, 
-        { hand: newHand, properties: newProps, bank: newBank, character: myCharacter, isFrozen: isMyCharacterFrozen }
+        { hand: newHand, properties: newProps, bank: newBank }
     );
   };
 
@@ -760,29 +787,30 @@ export default function GameBoard() {
 
     if (isDiscardingExcess) {
       const newHand = myHand.filter((c: any) => c.runtimeId !== card.runtimeId);
+      updateMyHand(newHand);
       const newDiscard = [card, ...discardPile];
+      setDiscardPile(newDiscard);
       
       if (newHand.length <= 7) {
         setIsDiscardingExcess(false);
         const nextRole = myRole === 'player1' ? 'player2' : 'player1';
         setTurnPhase('draw');
         setPlaysRemaining(0);
-        await addLogAndSync(`${myName} discarded excess cards and ended turn.`, { discardPile: newDiscard, activeTurn: nextRole, turnPhase: 'draw', playsRemaining: 3 }, { hand: newHand, bank: myBank, properties: myProperties, character: myCharacter, isFrozen: isMyCharacterFrozen });
+        await addLogAndSync(`${myName} discarded excess cards and ended turn.`, { discardPile: newDiscard, activeTurn: nextRole, turnPhase: 'draw', playsRemaining: 3 }, { hand: newHand });
       } else {
-        setMyHand(newHand);
-        setDiscardPile(newDiscard);
-        await addLogAndSync(`Discarded excess card.`, { discardPile: newDiscard }, { hand: newHand, bank: myBank, properties: myProperties, character: myCharacter, isFrozen: isMyCharacterFrozen });
+        await addLogAndSync(`Discarded excess card.`, { discardPile: newDiscard }, { hand: newHand });
       }
       return;
     }
 
     if (card.type === 'property') {
       const newHand = myHand.filter((c: any) => c.runtimeId !== card.runtimeId);
-      setMyHand(newHand);
+      updateMyHand(newHand);
       const newProps = [...myProperties, card];
+      updateMyProperties(newProps);
       const newPlays = playsRemaining - 1;
       setPlaysRemaining(newPlays);
-      await addLogAndSync(`Played item: ${card.name}`, { playsRemaining: newPlays, winner: countCompleteSets(newProps) >= 3 ? myName : winner }, { hand: newHand, properties: newProps, bank: myBank, character: myCharacter, isFrozen: isMyCharacterFrozen });
+      await addLogAndSync(`Played item: ${card.name}`, { playsRemaining: newPlays, winner: countCompleteSets(newProps) >= 3 ? myName : winner }, { hand: newHand, properties: newProps });
     } else if (card.type === 'wildcard') {
       const isAny = card.colorSet?.includes("Any") || card.name.toLowerCase().includes("wild any");
       if (isAny && myProperties.length === 0) {
@@ -790,15 +818,16 @@ export default function GameBoard() {
         return; 
       }
       const newHand = myHand.filter((c: any) => c.runtimeId !== card.runtimeId);
-      setMyHand(newHand);
+      updateMyHand(newHand);
       setWildcardSelectionModal(card);
     } else if (card.type === 'money') {
       const newHand = myHand.filter((c: any) => c.runtimeId !== card.runtimeId);
-      setMyHand(newHand);
+      updateMyHand(newHand);
       const newBank = [...myBank, card];
+      updateMyBank(newBank);
       const newPlays = playsRemaining - 1;
       setPlaysRemaining(newPlays);
-      await addLogAndSync(`Added points to Bank.`, { playsRemaining: newPlays }, { hand: newHand, bank: newBank, properties: myProperties, character: myCharacter, isFrozen: isMyCharacterFrozen });
+      await addLogAndSync(`Added points to Bank.`, { playsRemaining: newPlays }, { hand: newHand, bank: newBank });
     } else if (card.type === 'action') {
       setSelectedActionCard(card);
     }
@@ -830,10 +859,14 @@ export default function GameBoard() {
         newOppProps = opponentProperties.filter((c: any) => c.runtimeId !== cardToPay.runtimeId);
         newMyProps = [...myProperties, cardToPay];
         logMsg = `${opponentName} surrendered item: ${cardToPay.name}`;
+        setOpponentProperties(newOppProps);
+        updateMyProperties(newMyProps);
     } else {
         newOppBank = opponentBank.filter((c: any) => c.runtimeId !== cardToPay.runtimeId);
         newMyBank = [...myBank, cardToPay];
         logMsg = `${opponentName} paid a card from bank.`;
+        setOpponentBank(newOppBank);
+        updateMyBank(newMyBank);
     }
     
     if (paymentPrompt) {
@@ -845,10 +878,10 @@ export default function GameBoard() {
       if (remaining <= 0 || remainingAssets === 0) {
         setPaymentPrompt(null);
         setIsPaymentVaultOpen(false);
-        await addLogAndSync(`${logMsg} Payment complete.`, { pendingAttack: null }, { hand: myHand, bank: newMyBank, properties: newMyProps, character: myCharacter, isFrozen: isMyCharacterFrozen }, { bank: newOppBank, properties: newOppProps, hand: opponentHand, character: opponentCharacter, isFrozen: isOpponentFrozen });
+        await addLogAndSync(`${logMsg} Payment complete.`, { pendingAttack: null }, {}, {});
       } else {
         setPaymentPrompt({ ...paymentPrompt, amount: remaining });
-        await addLogAndSync(`${logMsg}`, {}, { hand: myHand, bank: newMyBank, properties: newMyProps, character: myCharacter, isFrozen: isMyCharacterFrozen }, { bank: newOppBank, properties: newOppProps, hand: opponentHand, character: opponentCharacter, isFrozen: isOpponentFrozen });
+        await addLogAndSync(`${logMsg}`, {}, {}, {});
       }
     }
   };
@@ -864,24 +897,28 @@ export default function GameBoard() {
         newMyProps = myProperties.filter((c: any) => c.runtimeId !== cardToPay.runtimeId);
         newOppProps = [...opponentProperties, cardToPay];
         logMsg = `${myName} surrendered item: ${cardToPay.name}`;
+        updateMyProperties(newMyProps);
+        setOpponentProperties(newOppProps);
     } else {
         newMyBank = myBank.filter((c: any) => c.runtimeId !== cardToPay.runtimeId);
         newOppBank = [...opponentBank, cardToPay];
         logMsg = `${myName} paid ${cardToPay.value} points from bank.`;
+        updateMyBank(newMyBank);
+        setOpponentBank(newOppBank);
     }
     
     if (playerPaymentPrompt) {
       const cardValue = Number(cardToPay.value) || 1;
       const remaining = playerPaymentPrompt.amount - cardValue;
-      const remainingAssets = newMyBank.reduce((sum: number, c: any) => sum + (Number(c.value) || 0), 0) + 
-                              newMyProps.filter((c: any) => getCardColor(c) !== harryProtectedColor && c.type !== 'wildcard').reduce((sum: number, c: any) => sum + (Number(c.value) || 1), 0);
+      const remainingAssets = myBank.reduce((sum: number, c: any) => sum + (Number(c.value) || 0), 0) + 
+                              myProperties.filter((c: any) => getCardColor(c) !== harryProtectedColor && c.type !== 'wildcard').reduce((sum: number, c: any) => sum + (Number(c.value) || 1), 0);
 
       if (remaining <= 0 || remainingAssets === 0) {
         setPlayerPaymentPrompt(null);
-        await addLogAndSync(`${logMsg} Payment complete.`, {}, { hand: myHand, bank: newMyBank, properties: newMyProps, character: myCharacter, isFrozen: isMyCharacterFrozen }, { bank: newOppBank, properties: newOppProps, hand: opponentHand, character: opponentCharacter, isFrozen: isOpponentFrozen });
+        await addLogAndSync(`${logMsg} Payment complete.`, {}, {}, {});
       } else {
         setPlayerPaymentPrompt({ ...playerPaymentPrompt, amount: remaining });
-        await addLogAndSync(`${logMsg}`, {}, { hand: myHand, bank: newMyBank, properties: newMyProps, character: myCharacter, isFrozen: isMyCharacterFrozen }, { bank: newOppBank, properties: newOppProps, hand: opponentHand, character: opponentCharacter, isFrozen: isOpponentFrozen });
+        await addLogAndSync(`${logMsg}`, {}, {}, {});
       }
     }
   };
@@ -899,13 +936,19 @@ export default function GameBoard() {
     const newMyProps = myProperties.filter((c: any) => !unfreezeSelectedIds.includes(c.runtimeId));
     const newDiscard = [...discarded, ...discardPile];
     
+    updateMyBank(newMyBank);
+    updateMyProperties(newMyProps);
+    setDiscardPile(newDiscard);
+    if (myRole === 'player1') setP1Frozen(false);
+    else setP2Frozen(false);
+
     setIsUnfreezeModalOpen(false);
     setUnfreezeSelectedIds([]);
     
     await addLogAndSync(
         `${myName} discarded ${unfreezeTotalPoints} points to lift Petrificus Totalus!`, 
         { discardPile: newDiscard }, 
-        { hand: myHand, bank: newMyBank, properties: newMyProps, character: myCharacter, isFrozen: false }
+        { bank: newMyBank, properties: newMyProps, isFrozen: false }
     );
   };
 
@@ -1036,12 +1079,12 @@ export default function GameBoard() {
                  const card = selectedActionCard;
                  setSelectedActionCard(null);
                  const newHand = myHand.filter((c:any) => c.runtimeId !== card.runtimeId);
+                 updateMyHand(newHand);
                  const newBank = [...myBank, card];
+                 updateMyBank(newBank);
                  const newPlays = playsRemaining - 1;
                  setPlaysRemaining(newPlays);
-                 setMyHand(newHand);
-                 setMyBank(newBank);
-                 await addLogAndSync(`Added an action card to Bank.`, { playsRemaining: newPlays }, { hand: newHand, bank: newBank, properties: myProperties, character: myCharacter, isFrozen: isMyCharacterFrozen });
+                 await addLogAndSync(`Added an action card to Bank.`, { playsRemaining: newPlays }, { hand: newHand, bank: newBank });
               }} className="flex-1 bg-amber-600 hover:bg-amber-500 text-stone-900 font-bold py-3 px-4 rounded-xl shadow border border-amber-400 transition">💰 Bank {selectedActionCard.value} Pts</button>
               <button onClick={() => resolveActionChoice('action')} className="flex-1 bg-purple-600 hover:bg-purple-500 text-white font-bold py-3 px-4 rounded-xl shadow border border-purple-400 transition">🪄 Cast Spell</button>
             </div>
@@ -1074,10 +1117,11 @@ export default function GameBoard() {
                   <button key={color} onClick={async () => {
                      const newProps = [...myProperties, wildcardSelectionModal];
                      setWildcardSelectionModal(null);
+                     updateMyProperties(newProps);
                      const newPlays = playsRemaining - 1;
                      setPlaysRemaining(newPlays);
                      setWildCardColors(prev => ({ ...prev, [wildcardSelectionModal.runtimeId]: color }));
-                     await addLogAndSync(`Played Wildcard as ${color}`, { playsRemaining: newPlays, wildCardColors: { ...wildCardColors, [wildcardSelectionModal.runtimeId]: color } }, { hand: myHand, properties: newProps, bank: myBank, character: myCharacter, isFrozen: isMyCharacterFrozen });
+                     await addLogAndSync(`Played Wildcard as ${color}`, { playsRemaining: newPlays, wildCardColors: { ...wildCardColors, [wildcardSelectionModal.runtimeId]: color } }, { properties: newProps });
                   }} className={`py-3 px-4 rounded-xl font-bold text-xs shadow border transition ${getPropertyColorClass(color)}`}>
                      {color}
                   </button>
@@ -1085,7 +1129,7 @@ export default function GameBoard() {
               })()}
             </div>
             <button onClick={() => {
-               setMyHand([...myHand, wildcardSelectionModal]);
+               updateMyHand([...myHand, wildcardSelectionModal]);
                setWildcardSelectionModal(null);
             }} className="text-stone-500 text-xs hover:text-white uppercase tracking-widest transition">Cancel (Return to Hand)</button>
           </div>
@@ -1616,7 +1660,7 @@ export default function GameBoard() {
             <div className="flex justify-center gap-3 h-40">
               {myHand.length > 0 ? (
                 myHand.map((card: any, idx: number) => (
-                  <div key={card.runtimeId} className="animate-draw-player cursor-grab active:cursor-grabbing" draggable onDragStart={(e: any) => { setDraggedCardIndex(idx); e.dataTransfer.effectAllowed = 'move'; }} onDragOver={(e: any) => { e.preventDefault(); e.dataTransfer.dropEffect = 'move'; }} onDrop={(e: any) => { e.preventDefault(); if (draggedCardIndex === null || draggedCardIndex === idx) return; const newHand = [...myHand]; const [draggedCard] = newHand.splice(draggedCardIndex, 1); newHand.splice(idx, 0, draggedCard); setMyHand(newHand); setDraggedCardIndex(null); }} onClick={() => handleCardClick(card)}>
+                  <div key={card.runtimeId} className="animate-draw-player cursor-grab active:cursor-grabbing" draggable onDragStart={(e: any) => { setDraggedCardIndex(idx); e.dataTransfer.effectAllowed = 'move'; }} onDragOver={(e: any) => { e.preventDefault(); e.dataTransfer.dropEffect = 'move'; }} onDrop={(e: any) => { e.preventDefault(); if (draggedCardIndex === null || draggedCardIndex === idx) return; const newHand = [...myHand]; const [draggedCard] = newHand.splice(draggedCardIndex, 1); newHand.splice(idx, 0, draggedCard); updateMyHand(newHand); setDraggedCardIndex(null); }} onClick={() => handleCardClick(card)}>
                     <PlayingCard name={card.name} type={card.type} colorSet={card.colorSet} value={card.value} rentValues={card.rentValues} effect={card.effect} activeWildColor={wildCardColors[card.runtimeId]} inHand={true} />
                   </div>
                 ))
