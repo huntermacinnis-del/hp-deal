@@ -60,24 +60,15 @@ export default function GameBoard() {
 
   const [tableActions, setTableActions] = useState<any[]>([]);
   const [draggedCardIndex, setDraggedCardIndex] = useState<number | null>(null);
+  
+  // MODAL STATES
   const [selectedActionCard, setSelectedActionCard] = useState<any | null>(null);
   const [isMyBankOpen, setIsMyBankOpen] = useState<boolean>(false); 
   const [isPaymentVaultOpen, setIsPaymentVaultOpen] = useState<boolean>(false); 
-  
-  // Payment States
   const [paymentPrompt, setPaymentPrompt] = useState<{ amount: number; reason: string } | null>(null);
   const [playerPaymentPrompt, setPlayerPaymentPrompt] = useState<{ amount: number; reason: string } | null>(null);
-  
   const [rentSelectionModal, setRentSelectionModal] = useState<{ validColors: string[]; actionCard: any } | null>(null);
-  
-  const [playerDefenseWindow, setPlayerDefenseWindow] = useState<{ 
-    attackName: string; 
-    attackDescription: string;
-    timeLeft: number; 
-    onAccept: () => void;
-    onCounterProtego: () => void;
-  } | null>(null);
-
+  const [playerDefenseWindow, setPlayerDefenseWindow] = useState<{ attackName: string; attackDescription: string; timeLeft: number; onAccept: () => void; onCounterProtego: () => void; } | null>(null);
   const [isUnfreezeModalOpen, setIsUnfreezeModalOpen] = useState<boolean>(false);
   const [unfreezeSelectedIds, setUnfreezeSelectedIds] = useState<string[]>([]);
   const [isDiscardModalOpen, setIsDiscardModalOpen] = useState<boolean>(false);
@@ -148,7 +139,7 @@ export default function GameBoard() {
       
       if (error || !deckData || deckData.length === 0) {
         console.error("CRITICAL ERROR: Failed to load deck from Supabase.", error);
-        return;
+        return; 
       }
       
       const normalizedData = deckData.map((card: any, idx: number) => ({
@@ -984,6 +975,258 @@ export default function GameBoard() {
         .animate-spell-pop { animation: spellPop 1.8s ease-out forwards; }
       `}</style>
 
+      {/* RESTORED MODAL UI BLOCK */}
+
+      {selectedActionCard && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/60 backdrop-blur-sm">
+          <div className="bg-stone-900 border-2 border-purple-500 p-6 rounded-2xl shadow-2xl flex flex-col items-center max-w-sm text-center">
+            <h3 className="text-purple-400 font-bold uppercase tracking-widest mb-2">Play Action Card</h3>
+            <div className="mb-4 scale-110 my-4">
+               <PlayingCard name={selectedActionCard.name} type={selectedActionCard.type} colorSet={selectedActionCard.colorSet} value={selectedActionCard.value} effect={selectedActionCard.effect} />
+            </div>
+            <p className="text-stone-300 text-sm mb-6">How would you like to use this card?</p>
+            <div className="flex gap-4 w-full">
+              <button onClick={() => resolveActionChoice('bank')} className="flex-1 bg-amber-600 hover:bg-amber-500 text-stone-900 font-bold py-3 px-4 rounded-xl shadow border border-amber-400 transition">💰 Bank {selectedActionCard.value} Pts</button>
+              <button onClick={() => resolveActionChoice('action')} className="flex-1 bg-purple-600 hover:bg-purple-500 text-white font-bold py-3 px-4 rounded-xl shadow border border-purple-400 transition">🪄 Cast Spell</button>
+            </div>
+            <button onClick={() => setSelectedActionCard(null)} className="mt-4 text-stone-500 text-xs hover:text-white uppercase tracking-widest transition">Cancel</button>
+          </div>
+        </div>
+      )}
+
+      {wildcardSelectionModal && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/60 backdrop-blur-sm">
+          <div className="bg-stone-900 border-2 border-amber-500 p-6 rounded-2xl shadow-2xl flex flex-col items-center max-w-md text-center">
+            <h3 className="text-amber-400 font-bold uppercase tracking-widest mb-4">Play Wildcard</h3>
+            <p className="text-stone-300 text-sm mb-6">Which color would you like to assign to this wildcard?</p>
+            <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 w-full mb-6">
+              {["Brown", "Dark Blue", "Light Green", "Pink", "Orange", "Yellow", "Red", "Light Blue", "Dark Green", "Black"].map(color => (
+                <button key={color} onClick={async () => {
+                   const newProps = [...myProperties, wildcardSelectionModal];
+                   setWildcardSelectionModal(null);
+                   const newPlays = playsRemaining - 1;
+                   setWildCardColors(prev => ({ ...prev, [wildcardSelectionModal.runtimeId]: color }));
+                   await addLogAndSync(`Played Wildcard as ${color}`, { playsRemaining: newPlays, wildCardColors: { ...wildCardColors, [wildcardSelectionModal.runtimeId]: color } }, { hand: myHand, properties: newProps, bank: myBank, character: myCharacter, isFrozen: isMyCharacterFrozen });
+                }} className={`py-2 px-3 rounded-lg font-bold text-xs shadow border transition ${getPropertyColorClass(color)}`}>
+                   {color}
+                </button>
+              ))}
+            </div>
+            <button onClick={() => {
+               setMyHand([...myHand, wildcardSelectionModal]);
+               setWildcardSelectionModal(null);
+            }} className="text-stone-500 text-xs hover:text-white uppercase tracking-widest transition">Cancel (Return to Hand)</button>
+          </div>
+        </div>
+      )}
+
+      {tableWildcardEditModal && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/60 backdrop-blur-sm">
+          <div className="bg-stone-900 border-2 border-amber-500 p-6 rounded-2xl shadow-2xl flex flex-col items-center max-w-md text-center">
+            <h3 className="text-amber-400 font-bold uppercase tracking-widest mb-4">Change Wildcard Color</h3>
+            <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 w-full mb-6">
+              {["Brown", "Dark Blue", "Light Green", "Pink", "Orange", "Yellow", "Red", "Light Blue", "Dark Green", "Black"].map(color => (
+                <button key={color} onClick={async () => {
+                   const cardId = tableWildcardEditModal.runtimeId;
+                   setTableWildcardEditModal(null);
+                   const newColors = { ...wildCardColors, [cardId]: color };
+                   setWildCardColors(newColors);
+                   await syncGameState({ board_state: { drawPile, discardPile, activeTurn, turnPhase, playsRemaining, winner, winRecorded, harryProtectedColor, wildCardColors: newColors, hunterWins, jessWins, isGameStarted, pendingAttack, gameLog } });
+                }} className={`py-2 px-3 rounded-lg font-bold text-xs shadow border transition ${getPropertyColorClass(color)}`}>
+                   {color}
+                </button>
+              ))}
+            </div>
+            <button onClick={() => setTableWildcardEditModal(null)} className="text-stone-500 text-xs hover:text-white uppercase tracking-widest transition">Cancel</button>
+          </div>
+        </div>
+      )}
+
+      {rentSelectionModal && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/60 backdrop-blur-sm">
+          <div className="bg-stone-900 border-2 border-purple-500 p-6 rounded-2xl shadow-2xl flex flex-col items-center max-w-sm text-center">
+            <h3 className="text-purple-400 font-bold uppercase tracking-widest mb-4">Charge Rent</h3>
+            <p className="text-stone-300 text-sm mb-6">Which color set would you like to charge rent for?</p>
+            <div className="flex flex-col gap-3 w-full mb-6">
+              {rentSelectionModal.validColors.map(color => (
+                <button key={color} onClick={() => handleColorSelectionForRent(color)} className={`py-3 px-4 rounded-xl font-bold text-sm shadow border transition ${getPropertyColorClass(color)}`}>
+                  {color} (Charge {calculatePointsForColor(color)} pts)
+                </button>
+              ))}
+            </div>
+            <button onClick={() => setRentSelectionModal(null)} className="text-stone-500 text-xs hover:text-white uppercase tracking-widest transition">Cancel</button>
+          </div>
+        </div>
+      )}
+
+      {targetSelectionModal && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/60 backdrop-blur-sm">
+          <div className="bg-stone-900 border-2 border-red-500 p-6 rounded-2xl shadow-2xl flex flex-col items-center max-w-3xl text-center overflow-hidden">
+            <h3 className="text-red-400 font-bold uppercase tracking-widest mb-2">Select Target</h3>
+            <p className="text-stone-300 text-sm mb-6">Choose an opponent's item to target.</p>
+            <div className="flex flex-wrap justify-center gap-4 max-h-[60vh] overflow-y-auto w-full p-2">
+               {targetSelectionModal.cards.map((card: any, idx: number) => (
+                  <div key={idx} onClick={() => handleTargetSelection(card)} className="transform transition hover:scale-105 cursor-pointer">
+                     <PlayingCard name={card.name} type={card.type} colorSet={card.colorSet} value={card.value} rentValues={card.rentValues} />
+                  </div>
+               ))}
+            </div>
+            <button onClick={() => setTargetSelectionModal(null)} className="mt-6 text-stone-500 text-xs hover:text-white uppercase tracking-widest transition">Cancel</button>
+          </div>
+        </div>
+      )}
+
+      {confundoModal && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/60 backdrop-blur-sm">
+          <div className="bg-stone-900 border-2 border-purple-500 p-6 rounded-2xl shadow-2xl flex flex-col items-center max-w-4xl text-center overflow-hidden">
+            <h3 className="text-purple-400 font-bold uppercase tracking-widest mb-2">Confundo!</h3>
+            <p className="text-stone-300 text-sm mb-6">
+              {confundoModal.step === 'my' ? "Select ONE of your items to swap." : "Select ONE of your opponent's items to take."}
+            </p>
+            <div className="flex flex-wrap justify-center gap-4 max-h-[60vh] overflow-y-auto w-full p-2">
+               {confundoModal.step === 'my' 
+                 ? myProperties.map((card: any, idx: number) => (
+                    <div key={idx} onClick={() => setConfundoModal({...confundoModal, step: 'opp', chosenMyCard: card})} className="transform transition hover:scale-105 cursor-pointer">
+                       <PlayingCard name={card.name} type={card.type} colorSet={card.colorSet} value={card.value} rentValues={card.rentValues} activeWildColor={wildCardColors[card.runtimeId]} />
+                    </div>
+                   ))
+                 : opponentProperties.filter((c:any) => getCardColor(c) !== harryProtectedColor).map((card: any, idx: number) => (
+                    <div key={idx} onClick={() => handleConfundoSelectOpponentCard(card)} className="transform transition hover:scale-105 cursor-pointer">
+                       <PlayingCard name={card.name} type={card.type} colorSet={card.colorSet} value={card.value} rentValues={card.rentValues} activeWildColor={wildCardColors[card.runtimeId]} />
+                    </div>
+                   ))
+               }
+            </div>
+            <button onClick={() => setConfundoModal(null)} className="mt-6 text-stone-500 text-xs hover:text-white uppercase tracking-widest transition">Cancel</button>
+          </div>
+        </div>
+      )}
+
+      {reparoModal && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/60 backdrop-blur-sm">
+          <div className="bg-stone-900 border-2 border-blue-500 p-6 rounded-2xl shadow-2xl flex flex-col items-center max-w-4xl text-center overflow-hidden">
+            <h3 className="text-blue-400 font-bold uppercase tracking-widest mb-2">Reparo</h3>
+            <p className="text-stone-300 text-sm mb-6">Select one card from the discard pile to add to your hand.</p>
+            <div className="flex flex-wrap justify-center gap-4 max-h-[60vh] overflow-y-auto w-full p-2">
+               {discardPile.map((card: any, idx: number) => (
+                  <div key={idx} onClick={() => handleReparoSelection(card)} className="transform transition hover:scale-105 cursor-pointer">
+                     <PlayingCard name={card.name} type={card.type} colorSet={card.colorSet} value={card.value} rentValues={card.rentValues} effect={card.effect} />
+                  </div>
+               ))}
+            </div>
+            <button onClick={() => setReparoModal(null)} className="mt-6 text-stone-500 text-xs hover:text-white uppercase tracking-widest transition">Cancel</button>
+          </div>
+        </div>
+      )}
+
+      {cedricChoiceModal && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/60 backdrop-blur-sm">
+          <div className="bg-stone-900 border-2 border-yellow-600 p-6 rounded-2xl shadow-2xl flex flex-col items-center max-w-sm text-center">
+            <h3 className="text-yellow-500 font-bold uppercase tracking-widest mb-4">Cedric Diggory Ability</h3>
+            <p className="text-stone-300 text-sm mb-6">Would you like to draw your 2 cards from the top of the Discard Pile instead of the Deck?</p>
+            <div className="flex gap-4 w-full mb-4">
+              <button onClick={executeCedricDrawFromDiscard} className="flex-1 bg-yellow-600 hover:bg-yellow-500 text-stone-900 font-bold py-3 px-4 rounded-xl shadow transition">Draw from Discard</button>
+              <button onClick={() => { setCedricChoiceModal(false); executeNormalDraw(); }} className="flex-1 bg-stone-700 hover:bg-stone-600 text-white font-bold py-3 px-4 rounded-xl shadow transition">Draw from Deck</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {isUnfreezeModalOpen && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/60 backdrop-blur-sm">
+          <div className="bg-stone-900 border-2 border-blue-400 p-6 rounded-2xl shadow-2xl flex flex-col items-center max-w-4xl text-center overflow-hidden">
+            <h3 className="text-blue-400 font-bold uppercase tracking-widest mb-2">Lift Petrificus Totalus</h3>
+            <p className="text-stone-300 text-sm mb-2">Select 10 points worth of cards to discard.</p>
+            <p className="text-amber-400 font-bold mb-4">Selected: {unfreezeTotalPoints} / 10 pts</p>
+            <div className="flex flex-wrap justify-center gap-4 max-h-[50vh] overflow-y-auto w-full p-2">
+               {[...myBank, ...myProperties].map((card: any, idx: number) => {
+                  const isSelected = unfreezeSelectedIds.includes(card.runtimeId);
+                  return (
+                    <div key={idx} onClick={() => toggleUnfreezeSelection(card.runtimeId)} className={`transform transition cursor-pointer ${isSelected ? 'ring-4 ring-blue-500 rounded-xl scale-105 opacity-50' : 'hover:scale-105'}`}>
+                       <PlayingCard name={card.name} type={card.type} colorSet={card.colorSet} value={card.value} rentValues={card.rentValues} isBank={myBank.some((c:any) => c.runtimeId === card.runtimeId)} />
+                    </div>
+                  )
+               })}
+            </div>
+            <div className="flex gap-4 mt-6">
+              <button onClick={confirmUnfreeze} disabled={unfreezeTotalPoints < 10} className={`py-3 px-6 rounded-xl font-bold transition ${unfreezeTotalPoints >= 10 ? 'bg-blue-600 hover:bg-blue-500 text-white shadow-lg' : 'bg-stone-700 text-stone-500 cursor-not-allowed'}`}>Discard & Lift Curse</button>
+              <button onClick={cancelUnfreeze} className="text-stone-500 text-xs hover:text-white uppercase tracking-widest transition px-4">Cancel</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {isDiscardModalOpen && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/60 backdrop-blur-sm">
+          <div className="bg-stone-900 border-2 border-stone-600 p-6 rounded-2xl shadow-2xl flex flex-col items-center max-w-4xl text-center overflow-hidden">
+            <h3 className="text-stone-300 font-bold uppercase tracking-widest mb-4">Discard Pile</h3>
+            <div className="flex flex-wrap justify-center gap-4 max-h-[60vh] overflow-y-auto w-full p-2">
+               {discardPile.map((card: any, idx: number) => (
+                  <div key={idx}>
+                     <PlayingCard name={card.name} type={card.type} colorSet={card.colorSet} value={card.value} rentValues={card.rentValues} effect={card.effect} />
+                  </div>
+               ))}
+            </div>
+            <button onClick={() => setIsDiscardModalOpen(false)} className="mt-6 bg-stone-700 hover:bg-stone-600 text-white font-bold py-2 px-6 rounded-full transition">Close</button>
+          </div>
+        </div>
+      )}
+
+      {paymentPrompt && (
+        <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 z-[60] bg-stone-900 border-4 border-amber-500 p-8 rounded-3xl shadow-2xl text-center w-[500px]">
+          <div className="absolute -top-6 left-1/2 transform -translate-x-1/2 w-12 h-12 bg-amber-500 rounded-full flex items-center justify-center text-2xl shadow-lg animate-bounce">💰</div>
+          <h3 className="text-amber-400 font-black text-2xl uppercase tracking-widest mb-2 mt-2">Incoming Payment</h3>
+          <p className="text-stone-300 mb-6">{opponentName} owes you for <span className="text-white font-bold">{paymentPrompt.reason}</span>.</p>
+          <div className="bg-stone-950 rounded-xl p-4 border border-stone-800 mb-6">
+            <span className="text-stone-500 text-xs uppercase tracking-widest font-bold block mb-1">Remaining Balance</span>
+            <span className="text-5xl font-serif font-black text-white">{paymentPrompt.amount} <span className="text-lg text-amber-500">pts</span></span>
+          </div>
+          <p className="text-xs text-stone-400 animate-pulse">Waiting for {opponentName} to select cards to pay...</p>
+        </div>
+      )}
+
+      {playerPaymentPrompt && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/80 backdrop-blur-md">
+          <div className="bg-red-950 border-4 border-red-600 p-8 rounded-3xl shadow-2xl flex flex-col items-center text-center w-[90%] max-w-5xl h-[85vh] overflow-hidden">
+            <h3 className="text-red-400 font-black text-3xl uppercase tracking-widest mb-2">You Owe Points!</h3>
+            <p className="text-stone-300 mb-4">{opponentName} charged you for <span className="text-white font-bold">{playerPaymentPrompt.reason}</span>.</p>
+            
+            <div className="bg-stone-900 rounded-xl p-4 border border-red-900 mb-6 w-64 shadow-inner">
+              <span className="text-red-500 text-xs uppercase tracking-widest font-bold block mb-1">Amount Due</span>
+              <span className="text-5xl font-serif font-black text-white">{playerPaymentPrompt.amount} <span className="text-lg text-red-500">pts</span></span>
+            </div>
+
+            <p className="text-sm text-stone-400 mb-4 uppercase tracking-widest font-bold">Select cards from your Bank or Items to pay:</p>
+
+            <div className="flex-1 w-full overflow-y-auto bg-stone-900/50 rounded-2xl p-6 border border-stone-800">
+              <div className="mb-6">
+                 <h4 className="text-amber-500 text-left text-xs font-bold uppercase tracking-widest mb-3 border-b border-stone-700 pb-1">Your Bank</h4>
+                 <div className="flex flex-wrap gap-4">
+                   {myBank.map((card: any, idx: number) => (
+                     <div key={idx} onClick={() => handlePlayerPayToOpponent(card, 'bank')} className="transform transition hover:-translate-y-2 hover:shadow-[0_0_15px_rgba(239,68,68,0.5)] cursor-pointer">
+                        <PlayingCard name={card.name} type={card.type} colorSet={card.colorSet} value={card.value} rentValues={card.rentValues} isBank={true} />
+                     </div>
+                   ))}
+                   {myBank.length === 0 && <span className="text-stone-600 italic text-sm">Bank is empty.</span>}
+                 </div>
+              </div>
+              
+              <div>
+                 <h4 className="text-emerald-500 text-left text-xs font-bold uppercase tracking-widest mb-3 border-b border-stone-700 pb-1">Your Items</h4>
+                 <div className="flex flex-wrap gap-4">
+                   {myProperties.filter((c:any) => getCardColor(c) !== harryProtectedColor).map((card: any, idx: number) => (
+                     <div key={idx} onClick={() => handlePlayerPayToOpponent(card, 'property')} className="transform transition hover:-translate-y-2 hover:shadow-[0_0_15px_rgba(239,68,68,0.5)] cursor-pointer">
+                        <PlayingCard name={card.name} type={card.type} colorSet={card.colorSet} value={card.value} rentValues={card.rentValues} activeWildColor={wildCardColors[card.runtimeId]} />
+                     </div>
+                   ))}
+                   {myProperties.filter((c:any) => getCardColor(c) !== harryProtectedColor).length === 0 && <span className="text-stone-600 italic text-sm">No valid items to give.</span>}
+                 </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
       {spellAnimation && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center pointer-events-none animate-flash">
             <div className="text-center animate-spell-pop">
@@ -1027,7 +1270,7 @@ export default function GameBoard() {
       )}
 
       {playerDefenseWindow && (
-        <div className="absolute bottom-8 left-1/2 transform -translate-x-1/2 bg-blue-950 border-2 border-blue-400 text-white px-6 py-3 rounded-2xl shadow-2xl z-50 flex items-center gap-6 animate-bounce">
+        <div className="absolute bottom-8 left-1/2 transform -translate-x-1/2 bg-blue-950 border-2 border-blue-400 text-white px-6 py-3 rounded-2xl shadow-2xl z-50 flex items-center gap-6 animate-bounce pointer-events-auto">
           <div>
             <h4 className="font-bold text-sm text-blue-300">⚠️ {playerDefenseWindow.attackName}</h4>
             <p className="text-xs text-amber-400 font-bold mb-1">{playerDefenseWindow.attackDescription}</p>
@@ -1558,11 +1801,11 @@ function PlayingCard({
           <span>ITEMS OWNED</span>
           <span>POINTS</span>
         </div>
-        <div className="flex-1 flex flex-col justify-around px-1 min-h-0">
+        <div className={`flex-1 flex flex-col ${resolvedRentValues.length > 3 ? 'justify-start mt-0.5' : 'justify-around'} px-1 min-h-0`}>
           {resolvedRentValues.map((rent: number, idx: number) => {
             const count = idx + 1;
             return (
-              <div key={idx} className="flex justify-between items-center text-stone-800 font-semibold border-b border-stone-100 last:border-0 py-[1.5px]">
+              <div key={idx} className={`flex justify-between items-center text-stone-800 font-semibold border-b border-stone-100 last:border-0 ${resolvedRentValues.length > 3 ? 'py-0' : 'py-[1.5px]'}`}>
                 <div className="relative w-5 h-5 flex items-center justify-center shrink-0">
                   {count === 1 && <div className={`w-4 h-3 rounded-[2px] border border-stone-800 shadow-sm ${topClass} flex items-center justify-center text-[6px] font-bold text-white`}>1</div>}
                   {count === 2 && <div className="relative w-5 h-4"><div className={`absolute left-0 top-0 w-4 h-3 rounded-[2px] border border-stone-800 shadow-sm ${topClass} transform -rotate-6`}></div><div className={`absolute left-1 top-0.5 w-4 h-3 rounded-[2px] border border-stone-800 shadow-sm ${topClass} flex items-center justify-center text-[6px] font-bold text-white z-10`}>2</div></div>}
@@ -1574,7 +1817,7 @@ function PlayingCard({
             );
           })}
         </div>
-        <div className="text-center text-[6px] font-bold uppercase tracking-wider text-stone-500 shrink-0 pt-0.5">
+        <div className="text-center text-[6px] font-bold uppercase tracking-wider text-stone-500 shrink-0 pt-0.5 pb-0.5 bg-stone-50 z-10 relative">
           Complete Set ({maxItems} Items)
         </div>
       </div>
