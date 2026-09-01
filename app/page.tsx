@@ -65,15 +65,14 @@ export default function GameBoard() {
   const [p2Frozen, setP2Frozen] = useState<boolean>(false);
 
   const [wildCardColors, setWildCardColors] = useState<{ [id: string]: string }>({});
-  const [wildCardRotations, setWildCardRotations] = useState<{ [id: string]: boolean }>({});
   const [harryProtectedColor, setHarryProtectedColor] = useState<string | null>(null);
   const [activeAttacks, setActiveAttacks] = useState<any[]>([]);
 
   const [tableActions, setTableActions] = useState<any[]>([]);
   const [draggedCardIndex, setDraggedCardIndex] = useState<number | null>(null);
   
-  // ISOLATED MODAL STATES (No card mutation on cancel)
-  const [selectedActionCard, setSelectedActionCard] = useState<{card: any, newHand: any[], newPlays: number, newDiscard: any[]} | null>(null);
+  // MODAL STATES (Cards securely stay in hand until fully processed)
+  const [selectedActionCard, setSelectedActionCard] = useState<any | null>(null);
   const [isMyBankOpen, setIsMyBankOpen] = useState<boolean>(false); 
   const [rentSelectionModal, setRentSelectionModal] = useState<any | null>(null);
   const [isUnfreezeModalOpen, setIsUnfreezeModalOpen] = useState<boolean>(false);
@@ -88,13 +87,6 @@ export default function GameBoard() {
   const [harryShieldModal, setHarryShieldModal] = useState<{active: boolean, attackToBlock: any | null}>({active: false, attackToBlock: null});
   const [isDiscardingExcess, setIsDiscardingExcess] = useState<boolean>(false);
   const [spellAnimation, setSpellAnimation] = useState<{name: string, player: string} | null>(null);
-
-  // Time Tracker for Protego Windows
-  const [now, setNow] = useState(Date.now());
-  useEffect(() => {
-    const interval = setInterval(() => setNow(Date.now()), 1000);
-    return () => clearInterval(interval);
-  }, []);
 
   const isMyTurn = activeTurn === myRole;
   const myName = myRole === 'player1' ? "Hunter" : "Jess";
@@ -208,11 +200,6 @@ export default function GameBoard() {
   };
 
   const syncGameState = async (updates: any) => {
-    if (updates.board_state && updates.board_state.activeAttacks) {
-        updates.board_state.activeAttacks = updates.board_state.activeAttacks.filter((a: any) => 
-            !(a.resolved || a.reverted) || (Date.now() - a.timestamp < 25000)
-        );
-    }
     await supabase.from('game_rooms').update(updates).eq('id', ROOM_ID);
   };
 
@@ -294,12 +281,6 @@ export default function GameBoard() {
     return card.colorSet;
   };
 
-  const isSetFull = (color: string, properties: any[]) => {
-    const required = getSetMax(color);
-    const count = properties.filter((c: any) => getCardColor(c) === color).length;
-    return count >= required;
-  };
-
   const isCompleteSet = (color: string, properties: any[]) => {
     const required = getSetMax(color);
     const cardsInSet = properties.filter((c: any) => getCardColor(c) === color);
@@ -309,8 +290,16 @@ export default function GameBoard() {
   };
 
   const countCompleteSets = (properties: any[]) => {
+    let totalComplete = 0;
     const allColors = ["Brown", "Dark Blue", "Light Green", "Pink", "Orange", "Yellow", "Red", "Light Blue", "Dark Green", "Black"];
-    return allColors.filter(col => isCompleteSet(col, properties)).length;
+    allColors.forEach(color => {
+       const req = getSetMax(color);
+       const cards = properties.filter(c => getCardColor(c) === color);
+       if (cards.length >= req && !cards.every((c: any) => c.type === 'wildcard' && (c.colorSet?.includes("Any") || c.name.toLowerCase().includes("wild any")))) {
+           totalComplete += Math.floor(cards.length / req);
+       }
+    });
+    return totalComplete;
   };
 
   const calculatePointsForColor = (color: string) => {
@@ -323,7 +312,7 @@ export default function GameBoard() {
 
   useEffect(() => {
     const checkVictory = async () => {
-        if (countCompleteSets(myProperties) >= 3 && !winRecorded && isMyTurn) {
+        if (countCompleteSets(myProperties) >= 3 && !winRecorded) {
             setWinner(myName);
             const newHunterWins = myRole === 'player1' ? hunterWins + 1 : hunterWins;
             const newJessWins = myRole === 'player2' ? jessWins + 1 : jessWins;
@@ -371,14 +360,21 @@ export default function GameBoard() {
   const startTurnDraw = async () => {
     if (!isMyTurn || turnPhase !== 'draw') return;
 
+    let extraUpdates = {};
+    if (myCharacter?.name === "Harry Potter") {
+        setHarryProtectedColor(null);
+        extraUpdates = { harryProtectedColor: null };
+    }
+
     if (!isMyCharacterFrozen && myCharacter?.name === "Cedric Diggory" && discardPile.length >= 2) {
       setCedricChoiceModal(true);
+      if (Object.keys(extraUpdates).length > 0) syncGameState({ board_state: { drawPile, discardPile, activeTurn, turnPhase, playsRemaining, winner, winRecorded, harryProtectedColor: null, wildCardColors, activeAttacks, hunterWins, jessWins, isGameStarted, gameLog } });
       return;
     }
-    await executeNormalDraw();
+    await executeNormalDraw(extraUpdates);
   };
 
-  const executeNormalDraw = async () => {
+  const executeNormalDraw = async (extraBoardUpdates = {}) => {
     let drawCount = 2;
     if (myHand.length === 0) drawCount = 5;
     else if (!isMyCharacterFrozen && myCharacter?.name === "Luna Lovegood") drawCount = 3;
@@ -405,7 +401,7 @@ export default function GameBoard() {
 
     await addLogAndSync(
         `${myName} drew ${actualCount} cards.`, 
-        { drawPile: currentDeck, discardPile: currentDiscard, turnPhase: 'play', playsRemaining: plays }, 
+        { drawPile: currentDeck, discardPile: currentDiscard, turnPhase: 'play', playsRemaining: plays, ...extraBoardUpdates }, 
         { hand: newHand }
     );
   };
@@ -448,7 +444,7 @@ export default function GameBoard() {
   };
 
   // OPTIMISTIC ATTACK EXECUTION & TRACKING
-  const executeOptimisticAttack = async (attackCard: any, description: string, attackData: any, newPlays: number, newDiscard: any[], newHand: any[]) => {
+  const executeOptimisticAttack = async (attackCard: any, description: string, attackData: any, newPlays: number) => {
       triggerSpellAnimation(attackCard.name.toUpperCase(), myName);
       
       const attackPayload = {
@@ -465,6 +461,10 @@ export default function GameBoard() {
 
       const newActiveAttacks = [attackPayload, ...activeAttacks];
       setActiveAttacks(newActiveAttacks);
+      
+      const newHand = myHand.filter((c: any) => c.runtimeId !== attackCard.runtimeId);
+      const newDiscard = [attackCard, ...discardPile];
+      
       setDiscardPile(newDiscard);
       setPlaysRemaining(newPlays);
       updateMyHand(newHand);
@@ -506,12 +506,6 @@ export default function GameBoard() {
           { hand: newHand, properties: newMyProps, isFrozen: newMyFrozen },
           { properties: newOppProps, isFrozen: newOppFrozen }
       );
-  };
-
-  const acceptAttack = async (attack: any) => {
-      const updatedAttacks = activeAttacks.map(a => a.id === attack.id ? { ...a, timestamp: 0 } : a);
-      setActiveAttacks(updatedAttacks);
-      await syncGameState({ board_state: { drawPile, discardPile, activeTurn, turnPhase, playsRemaining, winner, winRecorded, harryProtectedColor, wildCardColors, activeAttacks: updatedAttacks, hunterWins, jessWins, isGameStarted, gameLog } });
   };
 
   const playProtego = async (attackToBlock: any) => {
@@ -646,10 +640,10 @@ export default function GameBoard() {
       }, {}, {});
   };
 
-  // 0 Asset Bypass & Active Modals
+  // 0 Asset Bypass for Payments
   useEffect(() => {
     const currentPayment = activeAttacks.find(a => a.type === 'payment' && a.target === myRole && !a.resolved && !a.reverted);
-    if (currentPayment && (now - currentPayment.timestamp >= 15000)) {
+    if (currentPayment) {
         const totalAssets = myBank.reduce((sum: number, c: any) => sum + (Number(c.value) || 0), 0) + 
                             myProperties.filter((c: any) => getCardColor(c) !== harryProtectedColor && c.type !== 'wildcard').reduce((sum: number, c: any) => sum + (Number(c.value) || 1), 0);
         if (totalAssets <= 0) {
@@ -657,28 +651,30 @@ export default function GameBoard() {
              addLogAndSync(`${myName} had no assets to pay. Payment waived.`, { activeAttacks: updatedAttacks }, {}, {});
         }
     }
-  }, [activeAttacks, myBank, myProperties, myRole, now]);
+  }, [activeAttacks, myBank, myProperties, myRole]);
 
-  const activePayment = activeAttacks.find(a => a.type === 'payment' && a.target === myRole && !a.resolved && !a.reverted && (now - a.timestamp >= 15000));
+  // Payment triggers instantly. Protegos are handled via Toasts. 
+  const activePayment = activeAttacks.find(a => a.type === 'payment' && a.target === myRole && !a.resolved && !a.reverted);
   const waitingPayment = activeAttacks.find(a => a.type === 'payment' && a.attacker === myRole && !a.resolved && !a.reverted);
-  const myTargetedAttacks = activeAttacks.filter(a => a.target === myRole && !a.resolved && !a.reverted && (now - a.timestamp) < 15000);
-  const currentDefenseTarget = myTargetedAttacks.length > 0 ? myTargetedAttacks[0] : null;
+  
+  // Exclude payments from the center targeted popup (they use their own vault)
+  const targetedAttacks = activeAttacks.filter(a => a.type !== 'payment' && a.target === myRole && !a.resolved && !a.reverted && (Date.now() - a.timestamp) < 15000);
 
   const resolveActionChoice = async (choice: 'bank' | 'action') => {
     if (!selectedActionCard) return;
 
-    const actionCard = selectedActionCard.card;
-    const newHand = selectedActionCard.newHand;
-    const newPlays = selectedActionCard.newPlays;
-    const newDiscard = selectedActionCard.newDiscard;
+    const actionCard = selectedActionCard;
     setSelectedActionCard(null);
 
+    const newPlays = playsRemaining - 1;
+
     if (choice === 'bank') {
+      const newHand = myHand.filter((c: any) => c.runtimeId !== actionCard.runtimeId);
       const newBank = [...myBank, actionCard];
       updateMyHand(newHand);
       updateMyBank(newBank);
       setPlaysRemaining(newPlays);
-      await addLogAndSync(`Added an action card to Bank.`, { playsRemaining: newPlays, discardPile: newDiscard }, { hand: newHand, bank: newBank });
+      await addLogAndSync(`Added an action card to Bank.`, { playsRemaining: newPlays }, { hand: newHand, bank: newBank });
       return;
     } 
 
@@ -703,24 +699,24 @@ export default function GameBoard() {
 
         if (validColors.length === 0) {
           alert("You don't own any items in those colors to collect points for!");
-          updateMyHand([...newHand, actionCard]); 
           return;
         } else if (validColors.length === 1) {
-          updateMyHand(newHand);
           const ptsAmt = calculatePointsForColor(validColors[0]);
-          await executeOptimisticAttack(actionCard, `Charging ${ptsAmt} points for their ${validColors[0]} set!`, { type: 'payment', amount: ptsAmt, reason: `Points for ${validColors[0]} Set` }, newPlays, newDiscard, newHand);
+          await executeOptimisticAttack(actionCard, `Charging ${ptsAmt} points for their ${validColors[0]} set!`, { type: 'payment', amount: ptsAmt, reason: `Points for ${validColors[0]} Set` }, newPlays);
         } else {
-          setRentSelectionModal({ validColors, actionCard, newPlays, newDiscard, newHand });
+          setRentSelectionModal({ validColors, actionCard, newPlays });
         }
     } 
     else if (actionName.includes("alohomora")) {
-        updateMyHand(newHand);
-        await executeOptimisticAttack(actionCard, "Demanding 2 points from you!", { type: 'payment', amount: 2, reason: "Alohomora Spell Fee" }, newPlays, newDiscard, newHand);
+        await executeOptimisticAttack(actionCard, "Demanding 2 points from you!", { type: 'payment', amount: 2, reason: "Alohomora Spell Fee" }, newPlays);
     }
     else if (actionName.includes("confundo") || actionName.includes("confundus")) {
-        setConfundoModal({ step: 'my', actionCard, chosenMyCard: null, newPlays, newDiscard, newHand });
+        setConfundoModal({ step: 'my', actionCard, chosenMyCard: null, newPlays });
     }
     else if (actionName.includes("geminio")) {
+        const newHand = myHand.filter((c: any) => c.runtimeId !== actionCard.runtimeId);
+        const newDiscard = [actionCard, ...discardPile];
+        
         let currentDeck = [...drawPile];
         let currentDiscard = [...newDiscard];
         if (currentDeck.length < 2) {
@@ -750,9 +746,9 @@ export default function GameBoard() {
         });
         if (eligibleCards.length === 0) {
            alert("Opponent has no eligible items to steal!");
-           updateMyHand([...newHand, actionCard]); 
+           return;
         } else {
-           setTargetSelectionModal({ type: 'levicorpus', actionCard, cards: eligibleCards, newPlays, newDiscard, newHand });
+           setTargetSelectionModal({ type: 'levicorpus', actionCard, cards: eligibleCards, newPlays });
         }
     }
     else if (actionName.includes("obliviate")) {
@@ -760,22 +756,20 @@ export default function GameBoard() {
             .filter(col => isCompleteSet(col, opponentProperties) && col !== harryProtectedColor);
         if (completeColors.length === 0) {
            alert("Opponent has no unprotected complete sets to steal!");
-           updateMyHand([...newHand, actionCard]); 
+           return;
         } else {
             const setRepresentations = completeColors.map(col => opponentProperties.find((c: any) => getCardColor(c) === col));
-            setTargetSelectionModal({ type: 'obliviate', actionCard, cards: setRepresentations, newPlays, newDiscard, newHand });
+            setTargetSelectionModal({ type: 'obliviate', actionCard, cards: setRepresentations, newPlays });
         }
     }
     else if (actionName.includes("petrificus totalus")) {
-        updateMyHand(newHand);
-        await executeOptimisticAttack(actionCard, "Trying to freeze your character!", { type: 'freeze' }, newPlays, newDiscard, newHand);
+        await executeOptimisticAttack(actionCard, "Trying to freeze your character!", { type: 'freeze' }, newPlays);
     } 
     else if (actionName.includes("reparo")) {
-        setReparoModal({ actionCard, newPlays, newDiscard, newHand });
+        setReparoModal({ actionCard, newPlays });
     }
     else if (actionName.includes("stupefy")) {
-        updateMyHand(newHand);
-        await executeOptimisticAttack(actionCard, "Demanding 5 points from you!", { type: 'payment', amount: 5, reason: "Stupefy Spell Fee" }, newPlays, newDiscard, newHand);
+        await executeOptimisticAttack(actionCard, "Demanding 5 points from you!", { type: 'payment', amount: 5, reason: "Stupefy Spell Fee" }, newPlays);
     } 
     else if (actionName.includes("wingardium leviosa")) {
         const isDraco = myCharacter?.name === "Draco Malfoy" && !isMyCharacterFrozen;
@@ -787,44 +781,45 @@ export default function GameBoard() {
         });
         if (eligibleCards.length === 0) {
            alert("Opponent has no eligible items to discard!");
-           updateMyHand([...newHand, actionCard]); 
+           return;
         } else {
-           setTargetSelectionModal({ type: 'wingardium', actionCard, cards: eligibleCards, newPlays, newDiscard, newHand });
+           setTargetSelectionModal({ type: 'wingardium', actionCard, cards: eligibleCards, newPlays });
         }
     }
   };
 
   const handleTargetSelection = async (targetCard: any) => {
     if (!targetSelectionModal) return;
-    const { type, actionCard, newPlays, newDiscard, newHand } = targetSelectionModal;
+    const { type, actionCard, newPlays } = targetSelectionModal;
     setTargetSelectionModal(null);
-    updateMyHand(newHand);
 
     const targetColor = getCardColor(targetCard);
     
     if (type === 'obliviate') {
         const stolenCards = opponentProperties.filter((c:any) => getCardColor(c) === targetColor);
-        await executeOptimisticAttack(actionCard, `Stole your ${targetColor} set!`, { type: 'steal_set', targetColor, stolenCards }, newPlays, newDiscard, newHand);
+        await executeOptimisticAttack(actionCard, `Stole your ${targetColor} set!`, { type: 'steal_set', targetColor, stolenCards }, newPlays);
     } else if (type === 'levicorpus') {
-        await executeOptimisticAttack(actionCard, `Stole your ${targetCard.name}!`, { type: 'steal_card', targetCard: targetCard }, newPlays, newDiscard, newHand);
+        await executeOptimisticAttack(actionCard, `Stole your ${targetCard.name}!`, { type: 'steal_card', targetCard: targetCard }, newPlays);
     } else if (type === 'wingardium') {
-        await executeOptimisticAttack(actionCard, `Discarded your ${targetCard.name}!`, { type: 'discard_card', targetCard: targetCard }, newPlays, newDiscard, newHand);
+        await executeOptimisticAttack(actionCard, `Discarded your ${targetCard.name}!`, { type: 'discard_card', targetCard: targetCard }, newPlays);
     }
   };
 
   const handleConfundoSelectOpponentCard = async (opponentCard: any) => {
     if (!confundoModal || !confundoModal.chosenMyCard) return;
-    const { actionCard, chosenMyCard, newPlays, newDiscard, newHand } = confundoModal;
+    const { actionCard, chosenMyCard, newPlays } = confundoModal;
     setConfundoModal(null);
-    updateMyHand(newHand);
-    await executeOptimisticAttack(actionCard, `Swapped items with you!`, { type: 'confundo', targetCard: opponentCard, myCard: chosenMyCard }, newPlays, newDiscard, newHand);
+    await executeOptimisticAttack(actionCard, `Swapped items with you!`, { type: 'confundo', targetCard: opponentCard, myCard: chosenMyCard }, newPlays);
   };
 
   const handleReparoSelection = async (card: any) => {
     if (!reparoModal) return;
-    const { actionCard, newPlays, newDiscard, newHand } = reparoModal;
+    const { actionCard, newPlays } = reparoModal;
     setReparoModal(null);
 
+    const newHand = myHand.filter((c: any) => c.runtimeId !== actionCard.runtimeId);
+    const newDiscard = [actionCard, ...discardPile];
+    
     const finalDiscard = newDiscard.filter((c: any) => c.runtimeId !== card.runtimeId);
     setDiscardPile(finalDiscard);
     setPlaysRemaining(newPlays);
@@ -835,7 +830,7 @@ export default function GameBoard() {
     updateMyHand(finalHand);
 
     await addLogAndSync(
-        `${myName} cast Reparo and added ${card.name} to hand!`, 
+        `${myName} cast Reparo and recovered ${card.name} into hand!`, 
         { discardPile: finalDiscard, playsRemaining: newPlays, lastSpellCast: { name: "REPARO", player: myName, id: Math.random() } }, 
         { hand: finalHand }
     );
@@ -843,11 +838,10 @@ export default function GameBoard() {
 
   const handleColorSelectionForRent = async (chosenColor: string) => {
     if (!rentSelectionModal) return;
-    const { actionCard, newPlays, newDiscard, newHand } = rentSelectionModal;
+    const { actionCard, newPlays } = rentSelectionModal;
     setRentSelectionModal(null);
-    updateMyHand(newHand);
     const ptsAmt = calculatePointsForColor(chosenColor);
-    await executeOptimisticAttack(actionCard, `Charging ${ptsAmt} points for their ${chosenColor} set!`, { type: 'payment', amount: ptsAmt, reason: `Points for ${chosenColor} Set` }, newPlays, newDiscard, newHand);
+    await executeOptimisticAttack(actionCard, `Charging ${ptsAmt} points for their ${chosenColor} set!`, { type: 'payment', amount: ptsAmt, reason: `Points for ${chosenColor} Set` }, newPlays);
   };
 
   const handleCardClick = async (card: any) => {
@@ -872,11 +866,6 @@ export default function GameBoard() {
     }
 
     if (card.type === 'property') {
-      const color = getCardColor(card);
-      if (isSetFull(color, myProperties)) {
-         alert(`Your ${color} set is already full!`);
-         return;
-      }
       const newHand = myHand.filter((c: any) => c.runtimeId !== card.runtimeId);
       updateMyHand(newHand);
       const newProps = [...myProperties, card];
@@ -890,8 +879,7 @@ export default function GameBoard() {
         alert("You cannot play an 'Every-Color Wild' card by itself. You must have at least one other item on the table first.");
         return; 
       }
-      const newHand = myHand.filter((c: any) => c.runtimeId !== card.runtimeId);
-      setWildcardSelectionModal({ card, newHand });
+      setWildcardSelectionModal({ card });
     } else if (card.type === 'money') {
       const newHand = myHand.filter((c: any) => c.runtimeId !== card.runtimeId);
       updateMyHand(newHand);
@@ -901,17 +889,14 @@ export default function GameBoard() {
       setPlaysRemaining(newPlays);
       await addLogAndSync(`Added points to Bank.`, { playsRemaining: newPlays }, { hand: newHand, bank: newBank });
     } else if (card.type === 'action') {
-      const newHand = myHand.filter((c: any) => c.runtimeId !== card.runtimeId);
-      const newPlays = playsRemaining - 1;
-      const newDiscard = [card, ...discardPile];
-      setSelectedActionCard({ card, newHand, newPlays, newDiscard });
+      setSelectedActionCard(card);
     }
   };
 
   const playTableAction = (tableCard: any) => {
     if (!isMyTurn || turnPhase !== 'play' || playsRemaining <= 0) return;
     setTableActions(tableActions.filter((c: any) => c.runtimeId !== tableCard.runtimeId));
-    setSelectedActionCard({ card: tableCard, newHand: myHand, newPlays: playsRemaining - 1, newDiscard: [tableCard, ...discardPile] });
+    setSelectedActionCard(tableCard);
   };
 
   const handlePlayerPayToOpponent = async (cardToPay: any, source: 'bank' | 'property') => {
@@ -1097,41 +1082,39 @@ export default function GameBoard() {
         .animate-spell-pop { animation: spellPop 1.8s ease-out forwards; }
       `}</style>
 
-      {/* CENTRAL MASSIVE PROTEGO WINDOW */}
-      {currentDefenseTarget && (
-        <div className="fixed inset-0 z-[110] flex items-center justify-center bg-black/20 backdrop-blur-none pointer-events-auto">
-          <div className="bg-blue-950 border-4 border-blue-500 p-8 rounded-3xl shadow-[0_0_100px_rgba(59,130,246,0.6)] max-w-lg text-center animate-spell-pop">
-             <h2 className="text-3xl font-black text-blue-300 mb-2 uppercase tracking-widest">⚠️ {currentDefenseTarget.attacker === 'player1' ? 'Hunter' : 'Jess'} {currentDefenseTarget.type === 'protego' ? 'Played Protego!' : 'Attacked!'}</h2>
-             <p className="text-xl text-amber-400 font-bold mb-6">{currentDefenseTarget.description}</p>
-             <div className="text-6xl font-black text-white mb-8">{Math.floor(15 - (now - currentDefenseTarget.timestamp)/1000)}s</div>
-             <div className="flex gap-4 justify-center">
-                { (myHand.some((c:any) => c.name.toLowerCase().includes('protego')) || tableActions.some((c:any) => c.name.toLowerCase().includes('protego'))) && (
-                    <button onClick={() => playProtego(currentDefenseTarget)} className="bg-blue-600 hover:bg-blue-500 text-white font-bold px-6 py-3 rounded-xl shadow-lg transition text-lg uppercase tracking-wider">🛡️ Play Protego</button>
-                )}
-                {myCharacter?.name === "Harry Potter" && !harryProtectedColor && !isMyCharacterFrozen && (
-                    <button onClick={() => setHarryShieldModal({active: true, attackToBlock: currentDefenseTarget})} className="bg-amber-600 hover:bg-amber-500 text-white font-bold px-6 py-3 rounded-xl shadow-lg transition text-lg uppercase tracking-wider">⚡ Lock Color</button>
-                )}
-                <button onClick={() => acceptAttack(currentDefenseTarget)} className="bg-red-700 hover:bg-red-600 text-white font-bold px-6 py-3 rounded-xl shadow-lg transition text-lg uppercase tracking-wider">💥 Take the Hit</button>
-             </div>
-          </div>
-        </div>
-      )}
+      {/* TARGETED ATTACKS TOASTS (Top Right - Non-Blocking) */}
+      <div className="absolute top-1/4 right-8 z-[100] flex flex-col gap-4 pointer-events-none">
+        {targetedAttacks.map(atk => (
+           <div key={atk.id} className="bg-blue-950 border-2 border-blue-400 p-4 rounded-2xl shadow-2xl pointer-events-auto w-72 animate-draw-opponent">
+              <h4 className="font-bold text-sm text-blue-300">⚠️ {atk.attacker === 'player1' ? 'Hunter' : 'Jess'} {atk.type === 'protego' ? 'Played Protego!' : 'Attacked!'}</h4>
+              <p className="text-xs text-amber-400 font-bold mb-1">{atk.description}</p>
+              <div className="flex gap-2 items-center justify-between mt-3">
+                 <span className="text-[10px] text-stone-300">{Math.floor(15 - (now - atk.timestamp)/1000)}s</span>
+                 { (myHand.some((c:any) => c.name.toLowerCase().includes('protego')) || tableActions.some((c:any) => c.name.toLowerCase().includes('protego'))) && (
+                    <button onClick={() => playProtego(atk)} className="bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold px-3 py-1.5 rounded-lg shadow transition">🛡️ Play Protego</button>
+                 )}
+                 {myCharacter?.name === "Harry Potter" && !harryProtectedColor && !isMyCharacterFrozen && (
+                    <button onClick={() => setHarryShieldModal({active: true, attackToBlock: atk})} className="bg-amber-600 hover:bg-amber-500 text-white text-xs font-bold px-3 py-1.5 rounded-lg shadow transition">⚡ Lock Color</button>
+                 )}
+              </div>
+           </div>
+        ))}
+      </div>
 
       {selectedActionCard && (
         <div className="fixed top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 z-[60] bg-stone-900/95 border-2 border-purple-500 p-6 rounded-3xl shadow-[0_0_50px_rgba(0,0,0,0.8)] flex flex-col items-center w-[340px] text-center">
           <h3 className="text-purple-400 font-bold uppercase tracking-widest mb-2">Play Action Card</h3>
           <div className="mb-4 scale-110 my-4">
-             <PlayingCard name={selectedActionCard.card.name} type={selectedActionCard.card.type} colorSet={selectedActionCard.card.colorSet} value={selectedActionCard.card.value} effect={selectedActionCard.card.effect} rentValues={selectedActionCard.card.rentValues} />
+             <PlayingCard name={selectedActionCard.name} type={selectedActionCard.type} colorSet={selectedActionCard.colorSet} value={selectedActionCard.value} effect={selectedActionCard.effect} rentValues={selectedActionCard.rentValues} />
           </div>
           <p className="text-stone-300 text-sm mb-6">How would you like to use this card?</p>
           <div className="flex gap-4 w-full">
-            <button onClick={() => resolveActionChoice('bank')} className="flex-1 bg-amber-600 hover:bg-amber-500 text-stone-900 font-bold py-3 px-2 rounded-xl shadow border border-amber-400 transition text-sm">💰 Bank {selectedActionCard.card.value} Pts</button>
+            <button onClick={async () => {
+               resolveActionChoice('bank');
+            }} className="flex-1 bg-amber-600 hover:bg-amber-500 text-stone-900 font-bold py-3 px-2 rounded-xl shadow border border-amber-400 transition text-sm">💰 Bank {selectedActionCard.value} Pts</button>
             <button onClick={() => resolveActionChoice('action')} className="flex-1 bg-purple-600 hover:bg-purple-500 text-white font-bold py-3 px-2 rounded-xl shadow border border-purple-400 transition text-sm">🪄 Cast Spell</button>
           </div>
-          <button onClick={() => {
-              updateMyHand([...selectedActionCard.newHand, selectedActionCard.card]);
-              setSelectedActionCard(null);
-          }} className="mt-4 text-stone-500 text-xs hover:text-white uppercase tracking-widest transition">Cancel</button>
+          <button onClick={() => setSelectedActionCard(null)} className="mt-4 text-stone-500 text-xs hover:text-white uppercase tracking-widest transition">Cancel</button>
         </div>
       )}
 
@@ -1171,17 +1154,15 @@ export default function GameBoard() {
 
               return availableColors.map(color => (
                 <button key={color} onClick={async () => {
-                   if (isSetFull(color, myProperties)) {
-                       alert(`Your ${color} set is already full!`);
-                       return;
-                   }
+                   const newHand = myHand.filter((c: any) => c.runtimeId !== card.runtimeId);
                    const newProps = [...myProperties, card];
                    const newPlays = playsRemaining - 1;
                    setWildcardSelectionModal(null);
+                   updateMyHand(newHand);
                    updateMyProperties(newProps);
                    setPlaysRemaining(newPlays);
                    setWildCardColors(prev => ({ ...prev, [card.runtimeId]: color }));
-                   await addLogAndSync(`Played Wildcard as ${color}`, { playsRemaining: newPlays, wildCardColors: { ...wildCardColors, [card.runtimeId]: color } }, { properties: newProps, hand: wildcardSelectionModal.newHand });
+                   await addLogAndSync(`Played Wildcard as ${color}`, { playsRemaining: newPlays, wildCardColors: { ...wildCardColors, [card.runtimeId]: color } }, { properties: newProps, hand: newHand });
                 }} className={`py-3 px-4 rounded-xl font-bold text-xs shadow border transition ${getPropertyColorClass(color)}`}>
                    {color}
                 </button>
@@ -1189,7 +1170,6 @@ export default function GameBoard() {
             })()}
           </div>
           <button onClick={() => {
-             updateMyHand([...wildcardSelectionModal.newHand, wildcardSelectionModal.card]);
              setWildcardSelectionModal(null);
           }} className="text-stone-500 text-xs hover:text-white uppercase tracking-widest transition">Cancel</button>
         </div>
@@ -1206,10 +1186,6 @@ export default function GameBoard() {
 
               return availableColors.map(color => (
                 <button key={color} onClick={async () => {
-                   if (isSetFull(color, myProperties.filter((c:any) => c.runtimeId !== card.runtimeId))) {
-                       alert(`Your ${color} set is already full!`);
-                       return;
-                   }
                    const cardId = tableWildcardEditModal.runtimeId;
                    setTableWildcardEditModal(null);
                    const newColors = { ...wildCardColors, [cardId]: color };
@@ -1226,7 +1202,7 @@ export default function GameBoard() {
       )}
 
       {isMyBankOpen && (
-        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/20 pointer-events-auto">
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/40 pointer-events-auto">
           <div className="bg-stone-900 border-2 border-amber-500 p-6 rounded-2xl shadow-[0_0_50px_rgba(0,0,0,0.8)] flex flex-col items-center max-w-4xl text-center max-h-[80vh] overflow-hidden">
             <div className="flex justify-between items-center w-full mb-4 border-b border-stone-800 pb-2">
               <h3 className="text-amber-400 font-bold uppercase tracking-widest text-sm">💰 {myName}'s Bank Vault ({myBankTotal} pts)</h3>
@@ -1235,7 +1211,7 @@ export default function GameBoard() {
             <div className="flex flex-wrap justify-center gap-4 overflow-y-auto w-full p-2">
               {myBank.map((card: any, idx: number) => (
                 <div key={idx} className="scale-90">
-                  <PlayingCard name={card.name} type={card.type} colorSet={card.colorSet} value={card.value} rentValues={card.rentValues} isBank={true} />
+                  <PlayingCard name={card.name} type={card.type} colorSet={card.colorSet} value={card.value} rentValues={card.rentValues} effect={card.effect} isBank={true} />
                 </div>
               ))}
               {myBank.length === 0 && <p className="text-stone-500 italic py-8">Your bank is completely empty.</p>}
@@ -1256,7 +1232,6 @@ export default function GameBoard() {
             ))}
           </div>
           <button onClick={() => {
-              updateMyHand([...rentSelectionModal.newHand, rentSelectionModal.actionCard]);
               setRentSelectionModal(null);
           }} className="text-stone-500 text-xs hover:text-white uppercase tracking-widest transition">Cancel</button>
         </div>
@@ -1274,7 +1249,6 @@ export default function GameBoard() {
              ))}
           </div>
           <button onClick={() => {
-              updateMyHand([...targetSelectionModal.newHand, targetSelectionModal.actionCard]);
               setTargetSelectionModal(null);
           }} className="mt-6 text-stone-500 text-xs hover:text-white uppercase tracking-widest transition">Cancel</button>
         </div>
@@ -1306,7 +1280,6 @@ export default function GameBoard() {
              }
           </div>
           <button onClick={() => {
-              updateMyHand([...confundoModal.newHand, confundoModal.actionCard]);
               setConfundoModal(null);
           }} className="mt-6 text-stone-500 text-xs hover:text-white uppercase tracking-widest transition">Cancel</button>
         </div>
@@ -1324,7 +1297,6 @@ export default function GameBoard() {
              ))}
           </div>
           <button onClick={() => {
-              updateMyHand([...reparoModal.newHand, reparoModal.actionCard]);
               setReparoModal(null);
           }} className="mt-6 text-stone-500 text-xs hover:text-white uppercase tracking-widest transition">Cancel</button>
         </div>
@@ -1344,7 +1316,7 @@ export default function GameBoard() {
       )}
 
       {isUnfreezeModalOpen && (
-        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/20 pointer-events-auto">
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/40 pointer-events-auto">
           <div className="bg-stone-900 border-2 border-blue-400 p-6 rounded-2xl shadow-[0_0_50px_rgba(0,0,0,0.8)] flex flex-col items-center max-w-4xl text-center overflow-hidden">
             <h3 className="text-blue-400 font-bold uppercase tracking-widest mb-2">Lift Petrificus Totalus</h3>
             <p className="text-stone-300 text-sm mb-2">Select 10 points worth of cards to discard.</p>
@@ -1368,7 +1340,7 @@ export default function GameBoard() {
       )}
 
       {isDiscardModalOpen && (
-        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/20 pointer-events-auto">
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/40 pointer-events-auto">
           <div className="bg-stone-900 border-2 border-stone-600 p-6 rounded-2xl shadow-[0_0_50px_rgba(0,0,0,0.8)] flex flex-col items-center max-w-4xl text-center overflow-hidden">
             <h3 className="text-stone-300 font-bold uppercase tracking-widest mb-4">Discard Pile</h3>
             <div className="flex flex-wrap justify-center gap-4 max-h-[60vh] overflow-y-auto w-full p-2">
@@ -1396,14 +1368,21 @@ export default function GameBoard() {
       )}
 
       {activePayment && (
-        <div className="fixed top-10 left-1/2 transform -translate-x-1/2 z-[110] bg-red-950 border-4 border-red-600 p-6 rounded-3xl shadow-[0_0_100px_rgba(220,38,38,0.6)] flex flex-col items-center text-center w-[90%] max-w-4xl h-[70vh] pointer-events-auto">
-            <h3 className="text-red-400 font-black text-2xl uppercase tracking-widest mb-2">You Owe Points!</h3>
+        <div className="fixed inset-0 z-[110] flex flex-col items-center justify-end bg-black/40 pb-10 pointer-events-auto">
+          <div className="bg-red-950 border-4 border-red-600 p-8 rounded-3xl shadow-[0_0_100px_rgba(220,38,38,0.6)] flex flex-col items-center text-center w-[90%] max-w-5xl h-[75vh] overflow-hidden">
+            <h3 className="text-red-400 font-black text-3xl uppercase tracking-widest mb-2">You Owe Points!</h3>
             <p className="text-stone-300 mb-4 text-sm">{opponentName} charged you for <span className="text-white font-bold">{activePayment.reason}</span>.</p>
 
             <div className="bg-stone-900 rounded-xl p-3 border border-red-900 mb-4 w-48 shadow-inner shrink-0">
               <span className="text-red-500 text-[10px] uppercase tracking-widest font-bold block mb-1">Amount Due</span>
               <span className="text-4xl font-serif font-black text-white">{activePayment.amount} <span className="text-sm text-red-500">pts</span></span>
             </div>
+
+            { (myHand.some((c:any) => c.name.toLowerCase().includes('protego')) || tableActions.some((c:any) => c.name.toLowerCase().includes('protego'))) && (
+                <button onClick={() => playProtego(activePayment)} className="bg-blue-600 hover:bg-blue-500 text-white font-bold px-6 py-2.5 rounded-full shadow-lg mb-4 animate-pulse">
+                   🛡️ Play Protego to Cancel Debt ({Math.floor(15 - (now - activePayment.timestamp)/1000)}s)
+                </button>
+            )}
 
             <p className="text-xs text-stone-400 mb-3 uppercase tracking-widest font-bold shrink-0">Select cards below to pay (Wildcards = 0 pts):</p>
 
@@ -1600,7 +1579,7 @@ export default function GameBoard() {
               <h3 className="text-green-400/70 text-[10px] uppercase mb-1 font-bold tracking-widest flex gap-1 items-center">Discard Pile</h3>
               {discardPile.length > 0 ? (
                 <div className="relative animate-play-player">
-                  <div className="pointer-events-none"><PlayingCard name={discardPile[0].name} type={discardPile[0].type} colorSet={discardPile[0].colorSet} value={discardPile[0].value} effect={discardPile[0].effect} rentValues={discardPile[0].rentValues} /></div>
+                  <div className="pointer-events-none"><PlayingCard name={discardPile[0].name} type={discardPile[0].type} colorSet={discardPile[0].colorSet} value={discardPile[0].value} effect={discardPile[0].effect} rentValues={discardPile[0].rentValues} activeWildColor={wildCardColors[discardPile[0].runtimeId]} /></div>
                   <span className="absolute -top-2 -right-2 bg-stone-900 text-amber-400 text-[10px] font-bold px-1.5 py-0.5 rounded-full border border-amber-500">{discardPile.length}</span>
                 </div>
               ) : (
@@ -1620,11 +1599,6 @@ export default function GameBoard() {
                       <div className="absolute inset-0 bg-blue-500/30 border-4 border-blue-400 rounded-xl flex flex-col items-center justify-center p-2 backdrop-blur-[1px]">
                         <span className="text-[10px] font-bold bg-blue-900 text-white px-2 py-0.5 rounded shadow mb-2">FROZEN ❄️</span>
                         {isMyTurn && (<button onClick={() => setIsUnfreezeModalOpen(true)} className="bg-amber-600 hover:bg-amber-500 text-white text-[9px] font-bold px-2 py-1 rounded shadow mt-2">Lift Curse (10 pts)</button>)}
-                      </div>
-                    )}
-                    {myCharacter.name === "Harry Potter" && !isMyCharacterFrozen && isMyTurn && !harryProtectedColor && (
-                      <div className="absolute -top-6 left-1/2 transform -translate-x-1/2 z-20">
-                         <button onClick={() => setHarryShieldModal({active: true, attackToBlock: null})} className="bg-blue-600 hover:bg-blue-500 text-white text-[9px] font-bold px-3 py-1 rounded-full shadow-lg border border-blue-400 whitespace-nowrap">🛡️ Set Shield</button>
                       </div>
                     )}
                   </div>
@@ -1784,7 +1758,7 @@ function PlayingCard({
     );
   }
 
-  if (isBank || type === "money") {
+  if (type === "money") {
     let moneyBg = "bg-amber-100 text-stone-900";
     if (value === 1) moneyBg = "bg-slate-300 text-stone-900";
     else if (value === 2) moneyBg = "bg-red-600 text-white";
